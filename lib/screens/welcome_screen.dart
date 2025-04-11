@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'dart:html' as html;
+import 'dart:convert';
 import '../models/saved_game.dart';
 import '../services/save_service.dart';
 import 'game_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -35,11 +38,28 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     });
 
     try {
+      print('WelcomeScreen: Début du chargement des sauvegardes');
+
+      // Obtenons directement l'instance de SharedPreferences pour vérifier
+      final prefs = await SharedPreferences.getInstance();
+      final rawSavedGames = prefs.getStringList('saved_games');
+      print(
+          'WelcomeScreen: SharedPreferences contient ${rawSavedGames?.length ?? 0} sauvegardes brutes');
+
+      // Utiliser le service pour charger les sauvegardes
       final savedGames = await _saveService.loadSavedGames();
+      print(
+          'WelcomeScreen: SaveService a retourné ${savedGames.length} sauvegardes');
 
       setState(() {
         _savedGames = savedGames;
       });
+
+      // Vérifier si les sauvegardes sont chargées correctement
+      if (savedGames.isEmpty && (rawSavedGames?.isNotEmpty ?? false)) {
+        print(
+            'ALERTE: Problème de chargement - SharedPreferences contient des données mais aucune sauvegarde n\'a été chargée');
+      }
     } catch (e) {
       print('Erreur lors du chargement des sauvegardes: $e');
     } finally {
@@ -206,14 +226,153 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       borderRadius: BorderRadius.circular(30),
                     ),
                   ),
-                  child: Text(
+                  child: const Text(
                     'Charger une Partie',
                     style: TextStyle(
                       fontSize: 20,
-                      color: _savedGames.isEmpty ? Colors.grey : Colors.white,
+                      color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                ),
+
+                // Bouton de débogage - uniquement visible en mode développement
+                const SizedBox(height: 50),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton(
+                        onPressed: () async {
+                          final prefs = await SharedPreferences.getInstance();
+                          final keys = prefs.getKeys();
+                          final data = {
+                            for (var key in keys)
+                              key: key == 'saved_games' || key == 'missions'
+                                  ? prefs.getStringList(key)
+                                  : prefs.get(key)
+                          };
+
+                          // Afficher les données dans une boîte de dialogue
+                          if (context.mounted) {
+                            showDialog(
+                              context: context,
+                              builder: (context) {
+                                return AlertDialog(
+                                  title: const Text('Données sauvegardées'),
+                                  content: SingleChildScrollView(
+                                    child: Text(data.toString()),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text('Fermer'),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[700],
+                        ),
+                        child: const Text('Vérifier les sauvegardes'),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton(
+                        onPressed: () async {
+                          // Confirmer la suppression
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (context) {
+                              return AlertDialog(
+                                title: const Text('Réinitialiser'),
+                                content: const Text(
+                                    'Supprimer toutes les données sauvegardées ? Cette action est irréversible.'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, false),
+                                    child: const Text('Annuler'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red,
+                                    ),
+                                    child: const Text('Supprimer'),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+
+                          if (confirm == true) {
+                            await _saveService.clearAllData();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      'Toutes les données ont été réinitialisées'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              // Recharger les sauvegardes
+                              _loadSavedGames();
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
+                        child: const Text('Réinitialiser les données'),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Ajout des boutons d'export/import manuel
+                const SizedBox(height: 20),
+                Text(
+                  'Exporter/Importer les sauvegardes',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () {
+                        _saveService.exportAllSavesToFile();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Fichier de sauvegarde téléchargé'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                      ),
+                      child: const Text('Exporter les sauvegardes'),
+                    ),
+                    const SizedBox(width: 20),
+                    ElevatedButton(
+                      onPressed: () {
+                        _showImportDialog();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                      ),
+                      child: const Text('Importer les sauvegardes'),
+                    ),
+                  ],
                 ),
 
                 // Affichage du chargement ou du nombre de sauvegardes
@@ -331,5 +490,78 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
 
     return result ?? false;
+  }
+
+  void _showImportDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Importer des sauvegardes'),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                  'Cliquez sur le bouton ci-dessous pour sélectionner un fichier de sauvegarde (.json)'),
+              SizedBox(height: 20),
+              Text('Note: Cette action remplacera vos sauvegardes actuelles',
+                  style: TextStyle(color: Colors.red, fontSize: 12)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                // Créer un élément input de type fichier
+                final uploadInput = html.FileUploadInputElement()
+                  ..accept = '.json';
+                uploadInput.click();
+
+                // Gérer la sélection de fichier
+                uploadInput.onChange.listen((event) {
+                  final file = uploadInput.files!.first;
+                  final reader = html.FileReader();
+                  reader.readAsText(file);
+                  reader.onLoadEnd.listen((event) {
+                    if (reader.result != null) {
+                      final content = reader.result as String;
+                      _saveService.importSavesFromFile(content).then((success) {
+                        Navigator.pop(context);
+
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content:
+                                  Text('Sauvegardes importées avec succès'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          _loadSavedGames();
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'Erreur lors de l\'importation des sauvegardes'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      });
+                    }
+                  });
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+              ),
+              child: const Text('Sélectionner un fichier'),
+            ),
+          ],
+        );
+      },
+    );
   }
 }

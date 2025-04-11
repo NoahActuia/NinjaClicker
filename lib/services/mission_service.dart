@@ -1,144 +1,205 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/mission.dart';
 import '../models/technique.dart';
 
 class MissionService {
-  static final MissionService _instance = MissionService._internal();
-  factory MissionService() => _instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  MissionService._internal();
-
-  // Liste des missions disponibles dans le mode histoire
+  // Liste des missions par défaut
   List<Mission> getMissions() {
     return [
       Mission(
-        id: 'mission1',
-        titre: 'L\'Académie Ninja',
-        description: 'Commence ton apprentissage à l\'Académie Ninja de Konoha',
+        id: 'm1',
+        titre: 'Académie des Ninjas',
+        description:
+            'Réussir l\'examen de l\'académie en apprenant à maîtriser le chakra',
         image: 'assets/images/academy.webp',
+        difficulte: 1,
         puissanceRequise: 0,
         recompensePuissance: 50,
-        histoire:
-            'Tu es maintenant inscrit à l\'Académie Ninja de Konoha. Ton objectif est de maîtriser les techniques de base et de devenir un Genin. Iruka-sensei t\'enseigne comment concentrer ton chakra pour réaliser des techniques simples.',
         recompenses: [
           Recompense(
-            type: 'clone',
-            quantite: 2,
-          ),
+              type: 'technique',
+              quantite: 1,
+              technique: Technique.compat(
+                nom: 'Substitution',
+                description: 'Remplacer son corps par un objet',
+                cout: 100,
+                puissanceParSeconde: 3,
+                son: 'sounds/technique_substitution.mp3',
+              )),
         ],
+        completed: false,
       ),
       Mission(
-        id: 'mission2',
-        titre: 'L\'Examen Chunin',
-        description: 'Prouve ta valeur lors de l\'examen pour devenir Chunin',
+        id: 'm2',
+        titre: 'Examen Chunin',
+        description: 'Affronter les meilleurs ninjas de votre génération',
         image: 'assets/images/chunin_exam.webp',
-        puissanceRequise: 100,
-        recompensePuissance: 200,
-        histoire:
-            'L\'examen Chunin a commencé et tu dois affronter des ninjas d\'autres villages cachés. La première épreuve est un test écrit difficile, la seconde est une épreuve de survie dans la Forêt de la Mort, et la troisième consiste en des combats individuels.',
+        difficulte: 2,
+        puissanceRequise: 200,
+        recompensePuissance: 150,
         recompenses: [
-          Recompense(
-            type: 'technique',
-            quantite: 1,
-            technique: Technique(
-              nom: 'Substitution',
-              description:
-                  'Technique permettant de remplacer ton corps par un objet',
-              cout: 150,
-              puissanceParSeconde: 5,
-              son: 'sounds/technique_substitution.mp3',
-            ),
-          ),
+          Recompense(type: 'clone', quantite: 2),
         ],
+        completed: false,
       ),
       Mission(
-        id: 'mission3',
-        titre: 'La Recherche de Sasuke',
-        description:
-            'Retrouve Sasuke qui a quitté le village pour rejoindre Orochimaru',
+        id: 'm3',
+        titre: 'Récupération de Sasuke',
+        description: 'Retrouver Sasuke et le ramener au village',
         image: 'assets/images/sasuke_retrieval.webp',
+        difficulte: 3,
         puissanceRequise: 500,
-        recompensePuissance: 500,
-        histoire:
-            'Sasuke a quitté le village pour rejoindre Orochimaru afin d\'obtenir plus de pouvoir. Tu dois former une équipe avec Shikamaru, Choji, Neji et Kiba pour le ramener avant qu\'il ne soit trop tard. Le combat sera difficile car les sbires d\'Orochimaru, les ninjas du Son, protègent Sasuke.',
+        recompensePuissance: 300,
         recompenses: [
           Recompense(
-            type: 'puissance',
-            quantite: 300,
-          ),
-          Recompense(
-            type: 'clone',
-            quantite: 5,
-          ),
+              type: 'technique',
+              quantite: 1,
+              technique: Technique.compat(
+                nom: 'Rasengan Géant',
+                description: 'Version améliorée du Rasengan',
+                cout: 2000,
+                puissanceParSeconde: 100,
+                son: 'sounds/technique_rasengan_geant.mp3',
+              )),
         ],
+        completed: false,
       ),
       Mission(
-        id: 'mission4',
-        titre: 'L\'Entraînement avec Jiraiya',
-        description:
-            'Quitte le village pour t\'entraîner avec l\'un des Sannins légendaires',
+        id: 'm4',
+        titre: 'Entraînement avec Jiraiya',
+        description: 'Partir en voyage avec l\'un des légendaires Sannin',
         image: 'assets/images/jiraiya_training.webp',
+        difficulte: 4,
         puissanceRequise: 1000,
-        recompensePuissance: 1000,
-        histoire:
-            'Pour devenir plus fort et te préparer à affronter l\'Akatsuki, tu pars en voyage d\'entraînement avec Jiraiya pendant deux ans et demi. Tu apprends à mieux contrôler le chakra du Renard à Neuf Queues et à perfectionner ton Rasengan.',
+        recompensePuissance: 500,
         recompenses: [
-          Recompense(
-            type: 'technique',
-            quantite: 1,
-            technique: Technique(
-              nom: 'Rasengan Géant',
-              description:
-                  'Version améliorée du Rasengan, beaucoup plus puissante',
-              cout: 2000,
-              puissanceParSeconde: 100,
-              son: 'sounds/technique_rasengan_geant.mp3',
-            ),
-          ),
+          Recompense(type: 'clone', quantite: 3),
+          Recompense(type: 'puissance', quantite: 500),
         ],
+        completed: false,
       ),
       Mission(
-        id: 'mission5',
+        id: 'm5',
         titre: 'Combat contre Pain',
-        description: 'Affronte le chef de l\'Akatsuki qui a détruit Konoha',
+        description: 'Affronter le chef de l\'Akatsuki pour sauver le village',
         image: 'assets/images/pain_battle.webp',
-        puissanceRequise: 3000,
-        recompensePuissance: 2000,
-        histoire:
-            'Pain, le chef de l\'Akatsuki, a attaqué et détruit le village de Konoha. Après avoir maîtrisé le Mode Sage, tu dois l\'affronter pour sauver le village et venger ton maître Jiraiya. Ce combat sera l\'un des plus difficiles que tu aies jamais connu.',
+        difficulte: 5,
+        puissanceRequise: 2000,
+        recompensePuissance: 1000,
         recompenses: [
           Recompense(
-            type: 'technique',
-            quantite: 1,
-            technique: Technique(
-              nom: 'Mode Sage Parfait',
-              description:
-                  'Utilisation parfaite de l\'énergie naturelle, augmentant considérablement ta puissance',
-              cout: 5000,
-              puissanceParSeconde: 300,
-              son: 'sounds/technique_mode_sage_parfait.mp3',
-            ),
-          ),
-          Recompense(
-            type: 'puissance',
-            quantite: 1000,
-          ),
+              type: 'technique',
+              quantite: 1,
+              technique: Technique.compat(
+                nom: 'Mode Sage Parfait',
+                description: 'Maîtrise parfaite de l\'énergie naturelle',
+                cout: 10000,
+                puissanceParSeconde: 500,
+                son: 'sounds/technique_mode_sage_parfait.mp3',
+              )),
         ],
+        completed: false,
       ),
     ];
   }
 
-  // Obtenir une mission par son ID
-  Mission? getMissionById(String id) {
-    final missions = getMissions();
+  // Vérifier si une mission est disponible
+  bool isMissionAvailable(Mission mission, int currentPuissance) {
+    return currentPuissance >= mission.puissanceRequise;
+  }
+
+  // Sauvegarder les missions dans Firebase
+  Future<void> saveMissions(List<Mission> missions) async {
     try {
-      return missions.firstWhere((mission) => mission.id == id);
+      final user = _auth.currentUser;
+      if (user == null) {
+        print(
+            'Impossible de sauvegarder les missions: aucun utilisateur connecté');
+        return;
+      }
+
+      // Convertir les missions en données JSON
+      final missionData = missions.map((mission) => mission.toJson()).toList();
+
+      // Sauvegarder dans la collection userMissions avec l'ID de l'utilisateur
+      await _firestore.collection('userMissions').doc(user.uid).set({
+        'missions': missionData,
+        'updatedAt': Timestamp.now(),
+      });
+
+      print('Missions sauvegardées avec succès');
     } catch (e) {
-      return null;
+      print('Erreur lors de la sauvegarde des missions: $e');
+      throw e;
     }
   }
 
-  // Vérifier si une mission est disponible (si la puissance est suffisante)
-  bool isMissionAvailable(Mission mission, int currentPuissance) {
-    return currentPuissance >= mission.puissanceRequise;
+  // Charger les missions depuis Firebase
+  Future<List<Mission>> loadMissions() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        print('Impossible de charger les missions: aucun utilisateur connecté');
+        return getMissions(); // Retourner les missions par défaut
+      }
+
+      // Récupérer le document des missions de l'utilisateur
+      final doc =
+          await _firestore.collection('userMissions').doc(user.uid).get();
+
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        if (data.containsKey('missions')) {
+          // Convertir les données en liste de missions
+          final missionList = List<Map<String, dynamic>>.from(data['missions']);
+          final missions = missionList.map((m) => Mission.fromJson(m)).toList();
+
+          print('${missions.length} missions chargées depuis Firebase');
+          return missions;
+        }
+      }
+
+      // Si aucune mission n'est trouvée, retourner les missions par défaut
+      print(
+          'Aucune mission trouvée dans Firebase, utilisation des missions par défaut');
+      return getMissions();
+    } catch (e) {
+      print('Erreur lors du chargement des missions: $e');
+      return getMissions(); // En cas d'erreur, retourner les missions par défaut
+    }
+  }
+
+  // Mettre à jour une mission spécifique
+  Future<void> updateMission(Mission mission) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        print(
+            'Impossible de mettre à jour la mission: aucun utilisateur connecté');
+        return;
+      }
+
+      // Récupérer les missions existantes
+      final missions = await loadMissions();
+
+      // Trouver et mettre à jour la mission
+      final index = missions.indexWhere((m) => m.id == mission.id);
+      if (index != -1) {
+        missions[index] = mission;
+
+        // Sauvegarder toutes les missions
+        await saveMissions(missions);
+        print('Mission ${mission.id} mise à jour avec succès');
+      } else {
+        print('Mission non trouvée: ${mission.id}');
+      }
+    } catch (e) {
+      print('Erreur lors de la mise à jour de la mission: $e');
+      throw e;
+    }
   }
 }

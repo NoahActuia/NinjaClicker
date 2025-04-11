@@ -9,10 +9,12 @@ class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     // Remplacer ces configurations par celles de votre projet Firebase
     return const FirebaseOptions(
-      apiKey: "YOUR_API_KEY",
-      appId: "YOUR_APP_ID",
-      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-      projectId: "ninja-clicker",
-    );
+        apiKey: "AIzaSyA7HLxjgqRF3Z16IW4Y8Rd7Ccg5CmskvZE",
+        authDomain: "ninjaclicker-9bad6.firebaseapp.com",
+        projectId: "ninjaclicker-9bad6",
+        storageBucket: "ninjaclicker-9bad6.firebasestorage.app",
+        messagingSenderId: "822565646211",
+        appId: "1:822565646211:web:3d474169b312791b8150b6",
+        measurementId: "G-7F6SJMK555");
   }
 }

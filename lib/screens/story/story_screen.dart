@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../models/mission.dart';
 import '../../models/technique.dart';
 import '../../services/mission_service.dart';
-import '../../services/save_service.dart';
 import 'mission_detail_screen.dart';
 
 class StoryScreen extends StatefulWidget {
@@ -22,7 +21,6 @@ class StoryScreen extends StatefulWidget {
 
 class _StoryScreenState extends State<StoryScreen> {
   final MissionService _missionService = MissionService();
-  final SaveService _saveService = SaveService();
 
   List<Mission> _missions = [];
   bool _isLoading = true;
@@ -40,44 +38,25 @@ class _StoryScreenState extends State<StoryScreen> {
     });
 
     try {
-      // Charger les missions sauvegardées
-      final savedMissions = await _saveService.loadMissions();
-
-      if (savedMissions.isNotEmpty) {
-        setState(() {
-          _missions = savedMissions;
-        });
-      } else {
-        // Si aucune mission sauvegardée, charger les missions par défaut
-        setState(() {
-          _missions = _missionService.getMissions();
-        });
-      }
+      // Charger les missions depuis Firebase
+      final missions = await _missionService.loadMissions();
+      setState(() {
+        _missions = missions;
+        _isLoading = false;
+      });
     } catch (e) {
       print('Erreur lors du chargement des missions: $e');
 
       // Charger les missions par défaut en cas d'erreur
       setState(() {
         _missions = _missionService.getMissions();
-      });
-    } finally {
-      setState(() {
         _isLoading = false;
       });
     }
   }
 
-  // Sauvegarder l'état des missions
-  Future<void> _saveMissions() async {
-    try {
-      await _saveService.saveMissions(_missions);
-    } catch (e) {
-      print('Erreur lors de la sauvegarde des missions: $e');
-    }
-  }
-
   // Marquer une mission comme terminée
-  void _completeMission(Mission mission) {
+  void _completeMission(Mission mission) async {
     setState(() {
       final index = _missions.indexWhere((m) => m.id == mission.id);
       if (index != -1) {
@@ -85,8 +64,13 @@ class _StoryScreenState extends State<StoryScreen> {
       }
     });
 
-    // Sauvegarder l'état des missions
-    _saveMissions();
+    // Sauvegarder l'état des missions dans Firebase
+    try {
+      await _missionService.saveMissions(_missions);
+      print('Progression des missions enregistrée');
+    } catch (e) {
+      print('Erreur lors de la sauvegarde des missions: $e');
+    }
 
     // Donner les récompenses au joueur
     int missionPuissance = mission.recompensePuissance;
@@ -201,37 +185,24 @@ class _StoryScreenState extends State<StoryScreen> {
                                   right: 8,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
+                                        horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
                                       color: Colors.green,
-                                      borderRadius: BorderRadius.circular(16),
+                                      borderRadius: BorderRadius.circular(20),
                                     ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.check_circle,
-                                          color: Colors.white,
-                                          size: 16,
-                                        ),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'Terminée',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
+                                    child: const Text(
+                                      'TERMINÉE',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                                 ),
                             ],
                           ),
-
-                          // Informations de la mission
+                          // Détails de la mission
                           Padding(
                             padding: const EdgeInsets.all(16),
                             child: Column(
@@ -241,16 +212,15 @@ class _StoryScreenState extends State<StoryScreen> {
                                   mission.description,
                                   style: const TextStyle(
                                     fontSize: 16,
+                                    height: 1.5,
                                   ),
                                 ),
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 10),
                                 Row(
                                   children: [
                                     Icon(
                                       Icons.flash_on,
-                                      color: isAvailable
-                                          ? Colors.orange
-                                          : Colors.grey,
+                                      color: Colors.orange[700],
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
@@ -259,77 +229,106 @@ class _StoryScreenState extends State<StoryScreen> {
                                         fontWeight: FontWeight.bold,
                                         color: isAvailable
                                             ? Colors.black
-                                            : Colors.grey,
+                                            : Colors.red,
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 8),
-                                if (!isAvailable ||
-                                    !isPreviousCompleted ||
-                                    mission.completed)
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: mission.completed
-                                          ? Colors.green.withOpacity(0.2)
-                                          : !isPreviousCompleted
-                                              ? Colors.orange.withOpacity(0.2)
-                                              : Colors.red.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      mission.completed
-                                          ? 'Mission déjà accomplie'
-                                          : !isPreviousCompleted
-                                              ? 'Terminez la mission précédente'
-                                              : 'Puissance insuffisante',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: mission.completed
-                                            ? Colors.green
-                                            : !isPreviousCompleted
-                                                ? Colors.orange[800]
-                                                : Colors.red,
+                                const SizedBox(height: 4),
+                                if (mission.difficulte != null)
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.star,
+                                        color: Colors.orange[700],
                                       ),
-                                    ),
-                                  )
-                                else
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              MissionDetailScreen(
-                                            mission: mission,
-                                            onComplete: () =>
-                                                _completeMission(mission),
-                                          ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Difficulté: ${mission.difficulte}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
                                         ),
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.orange,
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
                                       ),
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 12),
-                                      minimumSize:
-                                          const Size(double.infinity, 0),
+                                    ],
+                                  ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Récompenses:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ...mission.recompenses.map((recompense) {
+                                  if (recompense.type == 'technique' &&
+                                      recompense.technique != null) {
+                                    return ListTile(
+                                      leading: const Icon(Icons.auto_awesome),
+                                      contentPadding: EdgeInsets.zero,
+                                      title: Text(
+                                        'Technique: ${recompense.technique!.name}',
+                                      ),
+                                      subtitle: Text(
+                                        recompense.technique!.description,
+                                      ),
+                                    );
+                                  } else if (recompense.type == 'clone') {
+                                    return ListTile(
+                                      leading: const Icon(Icons.people),
+                                      contentPadding: EdgeInsets.zero,
+                                      title: Text(
+                                        '${recompense.quantite} clone${recompense.quantite > 1 ? 's' : ''}',
+                                      ),
+                                    );
+                                  } else {
+                                    return ListTile(
+                                      leading: const Icon(Icons.bolt),
+                                      contentPadding: EdgeInsets.zero,
+                                      title: Text(
+                                        '${recompense.quantite} points de puissance',
+                                      ),
+                                    );
+                                  }
+                                }).toList(),
+                                const SizedBox(height: 10),
+                                Center(
+                                  child: ElevatedButton.icon(
+                                    onPressed: (isAvailable &&
+                                            isPreviousCompleted &&
+                                            !mission.completed)
+                                        ? () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    MissionDetailScreen(
+                                                  mission: mission,
+                                                  onComplete: () =>
+                                                      _completeMission(mission),
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        : null,
+                                    icon: Icon(
+                                      mission.completed
+                                          ? Icons.check_circle
+                                          : Icons.play_arrow,
                                     ),
-                                    child: const Text(
-                                      'Commencer la mission',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
+                                    label: Text(
+                                      mission.completed
+                                          ? 'Terminée'
+                                          : 'Commencer la mission',
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: mission.completed
+                                          ? Colors.green
+                                          : Colors.orange[700],
+                                      foregroundColor: Colors.white,
                                     ),
                                   ),
+                                ),
                               ],
                             ),
                           ),

@@ -16,6 +16,14 @@ class Technique {
   final bool isDefault;
   int level = 0;
 
+  // Propriétés de compatibilité
+  String get nom => name;
+  int get cout => cost;
+  int get puissanceParSeconde => powerPerSecond;
+  String get son => sound;
+  int get niveau => level;
+  set niveau(int value) => level = value;
+
   Technique({
     required this.id,
     required this.name,
@@ -32,6 +40,41 @@ class Technique {
     this.isDefault = false,
     this.level = 0,
   });
+
+  // Constructeur de compatibilité pour l'ancien code
+  factory Technique.compat({
+    String id = '',
+    required String nom,
+    required String description,
+    required int cout,
+    required int puissanceParSeconde,
+    required String son,
+    String type = 'special',
+    String? trigger,
+    String effect = 'damage',
+    int chakraCost = 50,
+    int cooldown = 1,
+    String? animation,
+    bool isDefault = false,
+    int niveau = 0,
+  }) {
+    return Technique(
+      id: id,
+      name: nom,
+      description: description,
+      cost: cout,
+      powerPerSecond: puissanceParSeconde,
+      sound: son,
+      type: type,
+      trigger: trigger,
+      effect: effect,
+      chakraCost: chakraCost,
+      cooldown: cooldown,
+      animation: animation,
+      isDefault: isDefault,
+      level: niveau,
+    );
+  }
 
   // Depuis Firestore
   factory Technique.fromFirestore(DocumentSnapshot doc) {
@@ -75,7 +118,14 @@ class Technique {
 
   // Rétrocompatibilité avec l'ancien modèle
   Map<String, dynamic> toJson() {
-    return toFirestore();
+    return {
+      ...toFirestore(),
+      'nom': name,
+      'cout': cost,
+      'puissanceParSeconde': powerPerSecond,
+      'son': sound,
+      'niveau': level,
+    };
   }
 
   // Rétrocompatibilité avec l'ancien modèle

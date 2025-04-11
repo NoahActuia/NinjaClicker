@@ -8,7 +8,8 @@ class Mission {
   final int puissanceRequise;
   final int recompensePuissance;
   final List<Recompense> recompenses;
-  final String histoire;
+  final String? histoire;
+  final int? difficulte;
   bool completed = false;
 
   Mission({
@@ -19,7 +20,8 @@ class Mission {
     required this.puissanceRequise,
     required this.recompensePuissance,
     required this.recompenses,
-    required this.histoire,
+    this.histoire,
+    this.difficulte,
     this.completed = false,
   });
 
@@ -33,6 +35,7 @@ class Mission {
       'recompensePuissance': recompensePuissance,
       'recompenses': recompenses.map((r) => r.toJson()).toList(),
       'histoire': histoire,
+      'difficulte': difficulte,
       'completed': completed,
     };
   }
@@ -49,6 +52,7 @@ class Mission {
           .map((r) => Recompense.fromJson(r))
           .toList(),
       histoire: json['histoire'],
+      difficulte: json['difficulte'],
       completed: json['completed'] ?? false,
     );
   }

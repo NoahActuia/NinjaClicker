@@ -1,19 +1,19 @@
-import 'package:firebase_auth/firebase_auth.dart' hide User;
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../models/user.dart' as app_model;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final firebase_auth.FirebaseAuth _auth = firebase_auth.FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Récupérer l'utilisateur actuel
-  User? get currentUser => _auth.currentUser;
+  firebase_auth.User? get currentUser => _auth.currentUser;
 
   // Vérifier si l'utilisateur est connecté
   bool get isLoggedIn => _auth.currentUser != null;
 
   // Stream sur l'état de l'authentification
-  Stream<User?> get authStateChanges => _auth.authStateChanges();
+  Stream<firebase_auth.User?> get authStateChanges => _auth.authStateChanges();
 
   // Inscription avec email et mot de passe
   Future<app_model.User?> register({

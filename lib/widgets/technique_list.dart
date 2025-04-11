@@ -81,7 +81,7 @@ class TechniqueCard extends StatelessWidget {
       ),
       child: ListTile(
         title: Text(
-          technique.nom,
+          technique.name,
           style: const TextStyle(
             fontWeight: FontWeight.bold,
           ),
@@ -98,7 +98,7 @@ class TechniqueCard extends StatelessWidget {
               ),
             ),
             Text(
-              'Production: ${technique.puissanceParSeconde * technique.niveau}/sec',
+              'Production: ${technique.powerPerSecond * technique.niveau}/sec',
               style: TextStyle(
                 color: Colors.green[700],
                 fontWeight: FontWeight.bold,
@@ -107,7 +107,7 @@ class TechniqueCard extends StatelessWidget {
           ],
         ),
         trailing: ElevatedButton(
-          onPressed: puissance >= technique.cout
+          onPressed: puissance >= technique.cost
               ? () => onAcheterTechnique(technique)
               : null,
           style: ElevatedButton.styleFrom(
@@ -116,7 +116,7 @@ class TechniqueCard extends StatelessWidget {
             disabledBackgroundColor: Colors.grey[400],
           ),
           child: Text(
-            '${technique.cout}',
+            '${technique.cost}',
             style: const TextStyle(
               fontWeight: FontWeight.bold,
             ),

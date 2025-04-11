@@ -74,31 +74,33 @@ class MissionDetailScreen extends StatelessWidget {
                 const SizedBox(height: 24),
 
                 // Histoire de la mission
-                const Text(
-                  "Histoire",
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    mission.histoire,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.white,
-                      height: 1.5,
+                if (mission.histoire != null) ...[
+                  const Text(
+                    "Histoire",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      mission.histoire!,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.white,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
 
                 // Récompenses
                 const Text(
@@ -216,14 +218,14 @@ class MissionDetailScreen extends StatelessWidget {
           size: 32,
         ),
         title: Text(
-          "Technique: ${technique.nom}",
+          "Technique: ${technique.name}",
           style: const TextStyle(
             fontWeight: FontWeight.bold,
           ),
         ),
         subtitle: Text(technique.description),
         trailing: Text(
-          "${technique.puissanceParSeconde}/s",
+          "${technique.powerPerSecond}/s",
           style: const TextStyle(
             color: Colors.green,
             fontWeight: FontWeight.bold,

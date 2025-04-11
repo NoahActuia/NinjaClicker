@@ -80,6 +80,46 @@ class NinjaService {
     return null;
   }
 
+  // Supprimer un ninja
+  Future<bool> deleteNinja(String ninjaId) async {
+    try {
+      // 1. Supprimer les techniques du ninja
+      final techniqueRelations = await _firestore
+          .collection('ninjaTechniques')
+          .where('ninjaId', isEqualTo: ninjaId)
+          .get();
+
+      // Utiliser un batch pour les suppressions massives
+      var batch = _firestore.batch();
+
+      for (var doc in techniqueRelations.docs) {
+        batch.delete(doc.reference);
+      }
+
+      // 2. Supprimer les senseis du ninja
+      final senseiRelations = await _firestore
+          .collection('ninjaSenseis')
+          .where('ninjaId', isEqualTo: ninjaId)
+          .get();
+
+      for (var doc in senseiRelations.docs) {
+        batch.delete(doc.reference);
+      }
+
+      // Exécuter le premier batch
+      await batch.commit();
+
+      // 3. Supprimer le ninja lui-même
+      await _firestore.collection('ninjas').doc(ninjaId).delete();
+
+      print('Ninja et ses relations supprimés avec succès');
+      return true;
+    } catch (e) {
+      print('Erreur lors de la suppression du ninja: $e');
+      return false;
+    }
+  }
+
   // Mettre à jour un ninja
   Future<void> updateNinja(Ninja ninja) async {
     try {
@@ -298,6 +338,69 @@ class NinjaService {
     } catch (e) {
       print('Erreur lors de l\'amélioration du sensei: $e');
       throw e;
+    }
+  }
+
+  // Mettre à jour le niveau d'une technique d'un ninja
+  Future<void> updateNinjaTechnique(
+      String ninjaId, String techniqueId, int level) async {
+    try {
+      // Vérifier si la relation existe déjà
+      final querySnapshot = await _firestore
+          .collection('ninjaTechniques')
+          .where('ninjaId', isEqualTo: ninjaId)
+          .where('techniqueId', isEqualTo: techniqueId)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        // La technique existe déjà, mettre à jour son niveau
+        final docId = querySnapshot.docs.first.id;
+        await _firestore
+            .collection('ninjaTechniques')
+            .doc(docId)
+            .update({'level': level});
+      } else {
+        // Ajouter la nouvelle technique avec le niveau spécifié
+        await _firestore.collection('ninjaTechniques').add({
+          'ninjaId': ninjaId,
+          'techniqueId': techniqueId,
+          'level': level,
+          'acquiredAt': Timestamp.now(),
+        });
+      }
+    } catch (e) {
+      print('Erreur lors de la mise à jour de la technique: $e');
+      throw e;
+    }
+  }
+
+  Future<void> createNinjaForNewUser(String userId, String username) async {
+    // Vérifier si l'utilisateur a déjà un ninja
+    final existingNinjas = await getNinjasByUser(userId);
+
+    if (existingNinjas.isEmpty) {
+      // Créer un nouveau ninja par défaut
+      await createNinja(
+        userId: userId,
+        name: username,
+      );
+
+      // Récupérer les techniques par défaut
+      final defaultTechniques = await _firestore
+          .collection('techniques')
+          .where('isDefault', isEqualTo: true)
+          .limit(1)
+          .get();
+
+      if (defaultTechniques.docs.isNotEmpty) {
+        final techniqueId = defaultTechniques.docs[0].id;
+        final ninja = await getNinjasByUser(userId);
+
+        if (ninja.isNotEmpty) {
+          // Ajouter la technique au ninja
+          await addTechniqueToNinja(ninja[0].id, techniqueId);
+        }
+      }
     }
   }
 }

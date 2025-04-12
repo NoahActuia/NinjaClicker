@@ -14,6 +14,7 @@ class Ninja {
   int xpPerClick;
   int passiveXp;
   Map<String, String> appearance;
+  DateTime lastConnected;
 
   // Données de classement
   String rank;
@@ -45,7 +46,8 @@ class Ninja {
     this.matchesPlayed = 0,
     this.wins = 0,
     this.losses = 0,
-  });
+    DateTime? lastConnected,
+  }) : this.lastConnected = lastConnected ?? DateTime.now();
 
   // Depuis Firestore
   factory Ninja.fromFirestore(DocumentSnapshot doc) {
@@ -70,6 +72,9 @@ class Ninja {
       matchesPlayed: data['matchesPlayed'] ?? 0,
       wins: data['wins'] ?? 0,
       losses: data['losses'] ?? 0,
+      lastConnected: data['lastConnected'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(data['lastConnected'])
+          : DateTime.now(),
     );
   }
 
@@ -93,6 +98,30 @@ class Ninja {
       'matchesPlayed': matchesPlayed,
       'wins': wins,
       'losses': losses,
+      'lastConnected': lastConnected.millisecondsSinceEpoch,
     };
+  }
+
+  // Calculer le score total du ninja (pour le classement)
+  int getTotalScore() {
+    return level * 1000 + xp;
+  }
+
+  // Obtenir la classe du ninja en fonction de son niveau
+  String getNinjaClass() {
+    if (level >= 50) return 'Kage';
+    if (level >= 30) return 'Jonin';
+    if (level >= 20) return 'Chunin';
+    if (level >= 10) return 'Genin';
+    return 'Académie';
+  }
+
+  // Obtenir le rang du ninja (1er, 2ème, etc.)
+  String getFormattedRank() {
+    final int rankNum = int.tryParse(rank) ?? 0;
+    if (rankNum == 1) return '1er';
+    if (rankNum == 2) return '2ème';
+    if (rankNum == 3) return '3ème';
+    return '${rankNum}ème';
   }
 }

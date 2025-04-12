@@ -80,6 +80,46 @@ class NinjaService {
     return null;
   }
 
+  // Récupérer tous les ninjas classés par niveau
+  Future<List<Ninja>> getAllNinjasRankedByLevel({int limit = 20}) async {
+    try {
+      // Récupérer tous les ninjas triés par niveau uniquement pour éviter l'erreur d'index
+      final querySnapshot = await _firestore
+          .collection('ninjas')
+          .orderBy('level', descending: true)
+          .limit(
+              limit * 2) // Récupérer plus de documents pour le tri secondaire
+          .get();
+
+      // Convertir les documents en objets Ninja
+      final ninjas =
+          querySnapshot.docs.map((doc) => Ninja.fromFirestore(doc)).toList();
+
+      // Trier localement par XP pour les ninjas de même niveau
+      ninjas.sort((a, b) {
+        // D'abord par niveau (descendant)
+        if (a.level != b.level) {
+          return b.level.compareTo(a.level);
+        }
+        // Ensuite par XP (descendant)
+        return b.xp.compareTo(a.xp);
+      });
+
+      // Limiter le nombre de résultats après le tri
+      final limitedNinjas = ninjas.take(limit).toList();
+
+      // Ajouter un rang à chaque ninja en fonction de sa position
+      for (int i = 0; i < limitedNinjas.length; i++) {
+        limitedNinjas[i].rank = (i + 1).toString(); // Le rang commence à 1
+      }
+
+      return limitedNinjas;
+    } catch (e) {
+      print('Erreur lors de la récupération du classement des ninjas: $e');
+      return [];
+    }
+  }
+
   // Supprimer un ninja
   Future<bool> deleteNinja(String ninjaId) async {
     try {

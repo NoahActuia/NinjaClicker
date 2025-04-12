@@ -35,13 +35,13 @@ class AudioService {
     if (!ambianceSoundEnabled) return;
 
     try {
-      if (isAmbiancePlaying) {
-        await ambiancePlayer.setVolume(ambianceVolume);
-      } else {
-        await ambiancePlayer.play(AssetSource('sounds/ambiance.mp3'),
-            volume: ambianceVolume);
-        isAmbiancePlaying = true;
-      }
+      await ambiancePlayer.stop();
+      isAmbiancePlaying = false;
+
+      await ambiancePlayer.play(AssetSource('sounds/ambiance.mp3'),
+          volume: ambianceVolume);
+      isAmbiancePlaying = true;
+
       print("Musique d'ambiance lancée avec succès");
     } catch (e) {
       print('Erreur lors du démarrage de la musique d\'ambiance: $e');
@@ -122,9 +122,25 @@ class AudioService {
     }
   }
 
+  Future<void> stopAmbiance() async {
+    try {
+      await ambiancePlayer.stop();
+      isAmbiancePlaying = false;
+      print("Musique d'ambiance arrêtée");
+    } catch (e) {
+      print('Erreur lors de l\'arrêt de la musique d\'ambiance: $e');
+    }
+  }
+
   void dispose() {
+    stopAmbiance();
+    stopChakraSound();
+
     ambiancePlayer.dispose();
     effectPlayer.dispose();
     techniquePlayer.dispose();
+
+    isAmbiancePlaying = false;
+    isEffectsSoundPlaying = false;
   }
 }

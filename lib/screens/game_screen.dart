@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math' show max;
+import 'dart:math' show max, min;
 import 'package:flutter/material.dart';
 import '../models/saved_game.dart';
 import '../models/technique.dart';
@@ -16,6 +16,8 @@ import '../widgets/settings_dialog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/ninja_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:math' show pow;
+import 'ranking_screen.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({
@@ -34,14 +36,21 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen>
     with SingleTickerProviderStateMixin {
   int _puissance = 0;
-  int _nombreDeClones = 0;
-  final int _coutClone = 25;
   late Timer _timer;
   late Timer? _autoSaveTimer;
   Timer? _chakraSoundTimer; // Timer pour le son du chakra
 
   // Ajout de la variable _currentNinja
   Ninja? _currentNinja;
+
+  // Variables pour le système de niveau
+  int _totalXP = 0;
+  int _playerLevel = 1;
+  int _xpForNextLevel = 100;
+
+  // Constantes pour le calcul du niveau
+  final int _baseXPForLevel = 100;
+  final double _levelScalingFactor = 1.5;
 
   // Liste des senseis
   List<Sensei> _senseis = [];
@@ -54,9 +63,52 @@ class _GameScreenState extends State<GameScreen>
   // Techniques
   late List<Technique> _techniques = [];
 
+  // Calculer l'XP nécessaire pour le niveau suivant
+  int _calculateXPForNextLevel(int currentLevel) {
+    return (_baseXPForLevel * pow(currentLevel, _levelScalingFactor)).toInt();
+  }
+
+  // Mettre à jour le niveau basé sur l'XP totale
+  void _updatePlayerLevel() {
+    int level = 1;
+    int xpNeeded = _baseXPForLevel;
+    int remainingXP = _totalXP;
+
+    // Tant qu'on a assez d'XP pour monter de niveau
+    while (remainingXP >= xpNeeded) {
+      remainingXP -= xpNeeded;
+      level++;
+      xpNeeded = _calculateXPForNextLevel(level);
+    }
+
+    setState(() {
+      _playerLevel = level;
+      _xpForNextLevel = xpNeeded;
+    });
+
+    // Mettre à jour le niveau du ninja si besoin
+    if (_currentNinja != null && _playerLevel != _currentNinja!.level) {
+      _currentNinja!.level = _playerLevel;
+      _ninjaService.updateNinja(_currentNinja!);
+    }
+  }
+
+  // Ajouter de l'XP et mettre à jour le niveau
+  void _addXP(int amount) {
+    setState(() {
+      _totalXP += amount;
+      _puissance += amount;
+    });
+
+    _updatePlayerLevel();
+  }
+
   // Initialisation des techniques
   Future<void> _initTechniques() async {
     try {
+      print(
+          '==================== INITIALISATION DES TECHNIQUES ====================');
+
       // Charger toutes les techniques disponibles de Firebase
       final snapshot =
           await FirebaseFirestore.instance.collection('techniques').get();
@@ -70,13 +122,36 @@ class _GameScreenState extends State<GameScreen>
       final availableTechniques =
           snapshot.docs.map((doc) => Technique.fromFirestore(doc)).toList();
 
+      // Vérifier que toutes les techniques ont un ID valide
+      for (int i = 0; i < availableTechniques.length; i++) {
+        final technique = availableTechniques[i];
+        if (technique.id.isEmpty) {
+          print(
+              '⚠️ Technique sans ID trouvée: ${technique.name}. Document ID: ${snapshot.docs[i].id}');
+
+          // Recréer une technique avec l'ID correct
+          final correctedTechnique = Technique.fromFirestore(snapshot.docs[i]);
+          availableTechniques[i] = correctedTechnique;
+
+          print('✅ ID corrigé: ${correctedTechnique.id}');
+        }
+      }
+
       setState(() {
         _techniques = availableTechniques;
       });
 
+      // Loguer toutes les techniques disponibles
+      for (var technique in _techniques) {
+        print(
+            '- Technique disponible: ${technique.name} (ID: ${technique.id})');
+      }
+
       print('${_techniques.length} techniques chargées depuis Firebase');
+      print(
+          '=================================================================');
     } catch (e) {
-      print('Erreur lors du chargement initial des techniques: $e');
+      print('⚠️ Erreur lors du chargement initial des techniques: $e');
     }
   }
 
@@ -84,73 +159,81 @@ class _GameScreenState extends State<GameScreen>
   void initState() {
     super.initState();
 
-    // Initialiser les techniques directement
-    _initTechniques();
-
-    // Charger la sauvegarde si elle existe
-    if (widget.savedGame != null) {
-      _loadGameData(widget.savedGame!);
-    }
-
     // Initialiser l'audio
     _initAudio();
 
-    // Charger le ninja de l'utilisateur courant
-    _loadCurrentNinja();
-
-    // Démarrer la génération automatique de puissance
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _genererPuissanceAutomatique();
-    });
-
-    // Configurer la sauvegarde automatique toutes les 2 minutes
-    _autoSaveTimer = Timer.periodic(const Duration(minutes: 2), (timer) async {
-      await _saveGame();
-
-      // Afficher une notification discrète de sauvegarde automatique
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.save, color: Colors.white, size: 16),
-                const SizedBox(width: 8),
-                const Text('Sauvegarde automatique effectuée'),
-              ],
-            ),
-            backgroundColor: Colors.green.shade700,
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        );
-      }
-
-      print('Sauvegarde automatique effectuée');
-    });
+    // Initialiser le jeu dans un ordre précis
+    _initializeGame();
   }
 
   @override
   void dispose() {
+    // Arrêter tous les timers
     _timer.cancel();
     _autoSaveTimer?.cancel();
-    _chakraSoundTimer?.cancel(); // Annuler le timer du son de chakra
+    _chakraSoundTimer?.cancel();
+
+    // Arrêter et libérer les ressources audio
     _audioService.dispose();
+
     super.dispose();
   }
 
   Future<void> _initAudio() async {
+    // S'assurer que tout son précédent est arrêté
+    await _audioService.stopAmbiance();
+
+    // Initialiser les ressources audio
     await _audioService.init();
-    _audioService.startAmbiance();
+
+    // Démarrer la musique d'ambiance
+    await _audioService.startAmbiance();
+  }
+
+  // Méthode pour initialiser le jeu dans le bon ordre
+  Future<void> _initializeGame() async {
+    try {
+      print('==================== INITIALISATION DU JEU ====================');
+
+      // Étape 1: Charger toutes les techniques disponibles
+      await _initTechniques();
+      print('Étape 1: Initialisation des techniques terminée');
+
+      // Étape 2: Charger la sauvegarde si elle existe
+      if (widget.savedGame != null) {
+        _loadGameData(widget.savedGame!);
+        print('Étape 2: Chargement de la sauvegarde terminé');
+      }
+
+      // Étape 3: Charger le ninja de l'utilisateur (qui chargera ses techniques et ses senseis)
+      await _loadCurrentNinja();
+      print('Étape 3: Chargement du ninja et de ses données terminé');
+
+      // Étape 4: Démarrer la génération automatique de puissance
+      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        _genererPuissanceAutomatique();
+      });
+      print('Étape 4: Génération automatique de puissance démarrée');
+
+      // Étape 5: Configurer la sauvegarde automatique toutes les 2 minutes
+      _autoSaveTimer =
+          Timer.periodic(const Duration(minutes: 2), (timer) async {
+        await _saveGame();
+        print('Sauvegarde automatique effectuée');
+      });
+      print('Étape 5: Sauvegarde automatique configurée');
+
+      print(
+          '==================== INITIALISATION TERMINÉE ====================');
+    } catch (e) {
+      print('⚠️ Erreur lors de l\'initialisation du jeu: $e');
+    }
   }
 
   // Charger les données d'une sauvegarde
   void _loadGameData(SavedGame savedGame) {
     setState(() {
       _puissance = savedGame.puissance;
-      _nombreDeClones = savedGame.nombreDeClones;
 
       // Fusionner les techniques sauvegardées avec les techniques initiales
       for (int i = 0; i < _techniques.length; i++) {
@@ -162,26 +245,26 @@ class _GameScreenState extends State<GameScreen>
   }
 
   void _genererPuissanceAutomatique() {
-    setState(() {
-      // Puissance générée par les clones
-      _puissance += _nombreDeClones;
+    int generatedXP = 0;
 
-      // Puissance générée par les techniques
-      for (var technique in _techniques) {
-        _puissance += technique.niveau * technique.puissanceParSeconde;
-      }
+    // XP générée uniquement par les senseis
+    for (var sensei in _senseis) {
+      generatedXP += sensei.getTotalXpPerSecond();
+    }
 
-      // Puissance générée par les senseis
-      for (var sensei in _senseis) {
-        _puissance += sensei.getTotalXpPerSecond();
-      }
-    });
+    // Ajouter l'XP générée
+    if (generatedXP > 0) {
+      _addXP(generatedXP);
+    }
   }
 
-  void _incrementerPuissance() {
-    setState(() {
-      _puissance++;
-    });
+  void _incrementerPuissance(int bonusXp, double multiplier) {
+    // Calculer le gain total : base (1) * multiplicateur + bonus
+    int baseXp = 1;
+    int gainTotal = (baseXp * multiplier).floor() + bonusXp;
+
+    // Ajouter le gain total d'XP
+    _addXP(gainTotal);
 
     // Gérer le son du chakra
     if (!_audioService.isEffectsSoundPlaying) {
@@ -199,42 +282,72 @@ class _GameScreenState extends State<GameScreen>
     });
   }
 
-  void _acheterClone() {
-    if (_puissance >= _coutClone) {
-      setState(() {
-        _puissance -= _coutClone;
-        _nombreDeClones++;
-      });
-    }
-  }
-
   // Méthode pour acheter une technique
   void _acheterTechnique(Technique technique) {
     if (_puissance >= technique.cost) {
+      // Sauvegarder l'état précédent pour pouvoir annuler en cas d'erreur
+      final previousLevel = technique.niveau;
+
+      // Mettre à jour l'état localement
       setState(() {
         _puissance -= technique.cost;
-        technique.niveau++;
+        technique.level =
+            technique.level + 1; // Modifier directement level au lieu de niveau
       });
 
       // Sauvegarder l'achat de la technique dans Firebase
       if (_currentNinja != null) {
-        _ninjaService.addTechniqueToNinja(_currentNinja!.id, technique.id);
-        print(
-            'Technique ${technique.name} ajoutée au ninja ${_currentNinja!.name}');
+        try {
+          print('==================== ACHAT DE TECHNIQUE ====================');
+          print('ID de la technique à acheter: ${technique.id}');
+          print('Niveau avant achat: ${previousLevel}');
+          print('Nouveau niveau: ${technique.niveau}');
+
+          // Utiliser addTechniqueToNinja qui gère l'ajout ou mise à jour
+          _ninjaService
+              .addTechniqueToNinja(_currentNinja!.id, technique.id)
+              .then((_) {
+            print('✅ Technique sauvegardée en DB: ${technique.name}');
+
+            // Vérifier que la technique apparaît bien comme apprise
+            print('Level final: ${technique.level}');
+            print('Niveau final: ${technique.niveau}');
+
+            // Jouer le son de la technique
+            _audioService.playTechniqueSound(technique.son);
+
+            // Force la mise à jour de l'interface
+            setState(() {});
+
+            // Sauvegarde complète
+            _saveGame();
+          }).catchError((error) {
+            // En cas d'erreur, restaurer l'état précédent
+            setState(() {
+              _puissance += technique.cost;
+              technique.level = previousLevel;
+            });
+
+            print('⚠️ Erreur lors de l\'achat de la technique: $error');
+          });
+        } catch (e) {
+          // En cas d'erreur, restaurer l'état précédent
+          setState(() {
+            _puissance += technique.cost;
+            technique.level = previousLevel;
+          });
+
+          print('⚠️ Erreur lors de l\'achat de la technique: $e');
+        }
       }
-
-      // Jouer le son de la technique
-      _audioService.playTechniqueSound(technique.son);
-
-      // Sauvegarde automatique après l'achat d'une technique
-      _saveGame();
     }
   }
 
   // Méthode pour acheter un sensei
   void _acheterSensei(Sensei sensei) {
     final cout = sensei.getCurrentCost();
-    if (_puissance >= cout) {
+    // Vérifier que le sensei n'a pas déjà été acheté
+    if (_puissance >= cout && sensei.quantity == 0) {
       setState(() {
         _puissance -= cout;
         sensei.quantity += 1;
@@ -329,27 +442,55 @@ class _GameScreenState extends State<GameScreen>
       if (user != null && _currentNinja != null) {
         // Mettre à jour le ninja avec les valeurs actuelles
         _currentNinja!.xp = _puissance;
+        _currentNinja!.level = _playerLevel;
 
         // Mettre à jour les autres attributs du ninja selon les besoins
-        _currentNinja!.passiveXp = (_techniques.fold(
-                    0, (sum, t) => sum + (t.niveau * t.puissanceParSeconde)) +
-                _senseis.fold(0, (sum, s) => sum + s.getTotalXpPerSecond()) +
-                _nombreDeClones)
-            .toInt();
+        _currentNinja!.passiveXp =
+            _senseis.fold(0, (sum, s) => sum + s.getTotalXpPerSecond()).toInt();
+
+        // Mettre à jour la date de dernière connexion
+        _currentNinja!.lastConnected = DateTime.now();
 
         // Mettre à jour le ninja dans Firebase
         await _ninjaService.updateNinja(_currentNinja!);
         print(
-            'Ninja sauvegardé: ${_currentNinja!.name} (${_currentNinja!.xp} XP)');
+            'Ninja sauvegardé: ${_currentNinja!.name} (${_currentNinja!.xp} XP, niveau ${_currentNinja!.level})');
+
+        // Sauvegarde des techniques - DEBUG
+        print(
+            '==================== SAUVEGARDE DES TECHNIQUES ====================');
+        print('Nombre total de techniques: ${_techniques.length}');
+
+        int techniquesSauvegardees = 0;
 
         // Mettre à jour les techniques du ninja
         for (var technique in _techniques) {
           if (technique.niveau > 0) {
-            await _ninjaService.updateNinjaTechnique(
-                _currentNinja!.id, technique.id, technique.niveau);
+            print(
+                'Sauvegarde de la technique ${technique.name} (ID: ${technique.id}, niveau ${technique.niveau})');
+
+            try {
+              // Vérifier que l'ID est valide
+              if (technique.id.isEmpty) {
+                print('⚠️ ERREUR: ID de technique vide!');
+                continue;
+              }
+
+              // Sauvegarder la technique
+              await _ninjaService.addTechniqueToNinja(
+                  _currentNinja!.id, technique.id);
+              techniquesSauvegardees++;
+            } catch (e) {
+              print(
+                  '⚠️ Erreur lors de la sauvegarde de la technique ${technique.name}: $e');
+            }
           }
         }
-        print('Techniques sauvegardées: ${_techniques.length}');
+
+        print(
+            'Techniques sauvegardées: $techniquesSauvegardees / ${_techniques.length}');
+        print(
+            '=================================================================');
 
         // Mettre à jour les senseis
         for (var sensei in _senseis) {
@@ -432,8 +573,14 @@ class _GameScreenState extends State<GameScreen>
             ),
             ElevatedButton(
               onPressed: () async {
+                // S'assurer que lastConnected est mis à jour avant de quitter
+                if (_currentNinja != null) {
+                  _currentNinja!.lastConnected = DateTime.now();
+                }
+
                 // Sauvegarder automatiquement avant de quitter
                 await _saveGame();
+
                 if (context.mounted) {
                   Navigator.pushReplacement(
                     context,
@@ -467,22 +614,51 @@ class _GameScreenState extends State<GameScreen>
               (missionPuissance, missionClones, missionTechniques) {
             setState(() {
               _puissance += missionPuissance;
-              _nombreDeClones += missionClones;
+              // Nous ignorons missionClones car les clones ne sont plus utilisés
 
               // Ajouter les techniques gagnées
+              print(
+                  '==================== TECHNIQUES GAGNÉES EN MISSION ====================');
+              print(
+                  'Nombre de techniques gagnées: ${missionTechniques.length}');
+
               for (var technique in missionTechniques) {
+                print(
+                    'Technique gagnée: ${technique.name} (ID: ${technique.id})');
+
+                // S'assurer que la technique a un ID valide
+                if (technique.id.isEmpty) {
+                  print('⚠️ Technique sans ID! Impossible de l\'ajouter.');
+                  continue;
+                }
+
                 // Vérifier si la technique existe déjà
                 var existingTechnique = _techniques.firstWhere(
-                  (t) => t.name == technique.name,
+                  (t) => t.id == technique.id,
                   orElse: () => technique,
                 );
 
                 if (!_techniques.contains(existingTechnique)) {
                   _techniques.add(existingTechnique);
+                  print(
+                      '➕ Nouvelle technique ajoutée: ${existingTechnique.name}');
                 }
 
                 existingTechnique.niveau += 1;
+                print(
+                    '✅ Niveau de la technique ${existingTechnique.name} augmenté à ${existingTechnique.niveau}');
+
+                // Sauvegarder immédiatement la technique
+                if (_currentNinja != null) {
+                  _ninjaService.addTechniqueToNinja(
+                      _currentNinja!.id, existingTechnique.id);
+                }
               }
+
+              // Sauvegarde complète après la mission
+              _saveGame();
+              print(
+                  '=================================================================');
             });
           },
         ),
@@ -497,20 +673,79 @@ class _GameScreenState extends State<GameScreen>
       if (user != null) {
         final ninjas = await _ninjaService.getNinjasByUser(user.uid);
         if (ninjas.isNotEmpty) {
+          final ninja = ninjas.first;
+
+          // Calcul de l'XP gagnée pendant l'absence du joueur
+          final now = DateTime.now();
+          final lastConnected = ninja.lastConnected;
+          final Duration timeSinceLastConnection =
+              now.difference(lastConnected);
+
+          // Charger les senseis avant de calculer l'XP passive
+          _currentNinja = ninja;
+          await _loadSenseis();
+
+          // Calculer l'XP passive gagnée (secondes × taux par seconde)
+          int passiveXpRate =
+              ninja.passiveXp; // Taux déjà enregistré dans le ninja
+
+          // Double vérification avec les senseis actuels
+          int currentPassiveRate =
+              _senseis.fold(0, (sum, s) => sum + s.getTotalXpPerSecond());
+
+          // Utiliser le taux le plus élevé pour être généreux envers le joueur
+          passiveXpRate = max(passiveXpRate, currentPassiveRate);
+
+          // Limiter le calcul à 24 heures pour éviter des gains excessifs
+          final int secondsAway =
+              min(timeSinceLastConnection.inSeconds, 24 * 60 * 60);
+          final int offlineXpGain = passiveXpRate * secondsAway;
+
+          // Mettre à jour le ninja avec l'XP gagnée hors ligne et la nouvelle heure de connexion
+          if (offlineXpGain > 0) {
+            ninja.xp += offlineXpGain;
+
+            // Mettre à jour le ninja dans la base de données
+            ninja.lastConnected = now;
+            await _ninjaService.updateNinja(ninja);
+
+            // Afficher une notification sur les gains hors ligne
+            if (mounted && offlineXpGain > 0) {
+              // Délai pour s'assurer que l'interface est chargée
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (mounted) {
+                  _showOfflineGainDialog(
+                      offlineXpGain, timeSinceLastConnection);
+                }
+              });
+            }
+          } else {
+            // Simplement mettre à jour l'heure de connexion
+            ninja.lastConnected = now;
+            await _ninjaService.updateNinja(ninja);
+          }
+
           setState(() {
-            _currentNinja = ninjas.first;
+            _currentNinja = ninja;
             _puissance = _currentNinja!
                 .xp; // Synchroniser la puissance avec l'XP du ninja
+            _totalXP = _currentNinja!.xp; // Initialiser l'XP totale
+            _playerLevel = _currentNinja!.level; // Initialiser le niveau
+            _xpForNextLevel = _calculateXPForNextLevel(
+                _playerLevel); // Calculer l'XP pour le niveau suivant
           });
 
           print(
-              'Ninja chargé: ${_currentNinja!.name} (${_currentNinja!.xp} XP)');
+              'Ninja chargé: ${_currentNinja!.name} (${_currentNinja!.xp} XP, niveau ${_currentNinja!.level})');
+          if (offlineXpGain > 0) {
+            print(
+                'Gain hors ligne: +$offlineXpGain XP (${_formatTimeSinceLastConnection(timeSinceLastConnection)})');
+          }
 
           // Charger les techniques du ninja
           await _loadTechniques();
 
-          // Charger les senseis du ninja
-          await _loadSenseis();
+          // Senseis déjà chargés plus haut
         } else {
           print('Aucun ninja trouvé pour l\'utilisateur ${user.uid}');
         }
@@ -530,35 +765,122 @@ class _GameScreenState extends State<GameScreen>
         return;
       }
 
-      // Charger les techniques du ninja actif pour obtenir leurs niveaux
-      final ninjaTechniques =
-          await _ninjaService.getNinjaTechniques(_currentNinja!.id);
+      // DEBUG
+      print(
+          '==================== CHARGEMENT DES TECHNIQUES ====================');
 
-      if (ninjaTechniques.isEmpty) {
-        print('Le ninja ${_currentNinja!.name} n\'a pas de techniques');
-        return;
+      // Charger toutes les techniques disponibles si pas encore fait
+      if (_techniques.isEmpty) {
+        await _initTechniques();
+        print('Techniques disponibles initialisées: ${_techniques.length}');
+      } else {
+        print('Techniques déjà chargées: ${_techniques.length}');
       }
 
-      // Mise à jour des niveaux pour les techniques déjà chargées
-      setState(() {
-        for (var ninjaTechnique in ninjaTechniques) {
-          final index =
-              _techniques.indexWhere((t) => t.id == ninjaTechnique.id);
-          if (index >= 0) {
-            // Mettre à jour le niveau de la technique existante
-            _techniques[index].level = ninjaTechnique.level;
-          } else {
-            // Ajouter la technique si elle n'existe pas déjà dans la liste
-            _techniques.add(ninjaTechnique);
-          }
-        }
-      });
+      // Charger les techniques du ninja actif pour obtenir leurs niveaux DIRECTEMENT depuis la DB
+      try {
+        final querySnapshot = await FirebaseFirestore.instance
+            .collection('ninjaTechniques')
+            .where('ninjaId', isEqualTo: _currentNinja!.id)
+            .get();
 
+        print(
+            'Relations techniques-ninja trouvées: ${querySnapshot.docs.length}');
+
+        if (querySnapshot.docs.isEmpty) {
+          print(
+              'Le ninja ${_currentNinja!.name} n\'a pas de techniques en DB (relation vide)');
+          return;
+        }
+
+        // Afficher toutes les relations
+        for (var doc in querySnapshot.docs) {
+          final data = doc.data();
+          final techniqueId = data['techniqueId'] as String;
+          final level = data['level'] as int? ?? 0;
+          print('- Relation trouvée: techniqueId=$techniqueId, level=$level');
+        }
+
+        // Mise à jour des niveaux pour les techniques déjà chargées
+        setState(() {
+          for (var doc in querySnapshot.docs) {
+            final data = doc.data();
+            final techniqueId = data['techniqueId'] as String;
+            final level = data['level'] as int? ?? 0;
+
+            final index = _techniques.indexWhere((t) => t.id == techniqueId);
+
+            if (index >= 0) {
+              // Mettre à jour DIRECTEMENT la propriété level (qui contrôle niveau)
+              _techniques[index].level = level;
+
+              print(
+                  '✅ Technique mise à jour: ${_techniques[index].name} (ID: ${_techniques[index].id})');
+              print(
+                  '   Level = ${_techniques[index].level}, Niveau = ${_techniques[index].niveau}');
+            } else {
+              print(
+                  '⚠️ Technique non trouvée dans la liste: ID=$techniqueId, niveau=$level');
+
+              // Noter les techniques manquantes pour les charger après le setState
+              _loadMissingTechnique(techniqueId, level);
+            }
+          }
+        });
+      } catch (e) {
+        print(
+            '⚠️ Erreur lors du chargement des relations techniques-ninja: $e');
+      }
+
+      // Vérifier les résultats finaux
+      int techniquesActives = 0;
+      for (var technique in _techniques) {
+        if (technique.niveau > 0) {
+          techniquesActives++;
+          print(
+              '▶️ Technique active: ${technique.name} (niveau=${technique.niveau})');
+        }
+      }
+
+      print('Techniques actives chargées: $techniquesActives');
       print(
-          'Niveaux des techniques mis à jour: ${ninjaTechniques.length} techniques du ninja');
+          '=================================================================');
     } catch (e) {
-      print('Erreur lors de la mise à jour des niveaux des techniques: $e');
+      print('⚠️ Erreur lors de la mise à jour des niveaux des techniques: $e');
     }
+  }
+
+  // Méthode auxiliaire pour charger une technique manquante
+  Future<void> _loadMissingTechnique(String techniqueId, int level) async {
+    try {
+      final techniqueDoc = await FirebaseFirestore.instance
+          .collection('techniques')
+          .doc(techniqueId)
+          .get();
+
+      if (techniqueDoc.exists) {
+        final technique = Technique.fromFirestore(techniqueDoc);
+        technique.level = level; // Définir directement le niveau
+
+        setState(() {
+          _techniques.add(technique);
+        });
+        print(
+            '➕ Technique manquante ajoutée: ${technique.name} (niveau ${technique.niveau})');
+      }
+    } catch (e) {
+      print('⚠️ Erreur lors du chargement de la technique manquante: $e');
+    }
+  }
+
+  // Méthode pour ouvrir l'écran de classement
+  void _openRankingScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const RankingScreen(),
+      ),
+    );
   }
 
   @override
@@ -616,51 +938,76 @@ class _GameScreenState extends State<GameScreen>
                   height: 42,
                   width: 42,
                   fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    // Utiliser une icône par défaut si l'image n'est pas trouvée
-                    return Icon(
-                      Icons.person,
-                      size: 38,
-                      color: Colors.white,
-                    );
-                  },
                 ),
               ),
               const SizedBox(width: 12),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.deepOrange.shade900,
-                      Colors.deepOrange.shade700,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(15),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
-                      blurRadius: 5,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  widget.playerName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    shadows: [
-                      Shadow(
-                        color: Colors.black45,
-                        blurRadius: 2,
-                        offset: Offset(1, 1),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.deepOrange.shade900,
+                          Colors.deepOrange.shade700,
+                        ],
                       ),
-                    ],
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 5,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      widget.playerName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black45,
+                            blurRadius: 2,
+                            offset: Offset(1, 1),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade800.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.star,
+                          color: Colors.amber,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Niveau $_playerLevel',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -718,6 +1065,11 @@ class _GameScreenState extends State<GameScreen>
               ),
             ),
             _buildActionButton(
+              icon: Icons.emoji_events,
+              tooltip: 'Classement',
+              onPressed: _openRankingScreen,
+            ),
+            _buildActionButton(
               icon: Icons.book,
               tooltip: 'Mode Histoire',
               onPressed: _goToStoryMode,
@@ -736,7 +1088,7 @@ class _GameScreenState extends State<GameScreen>
           ],
           bottom: TabBar(
             indicatorSize: TabBarIndicatorSize.tab,
-            indicatorPadding: const EdgeInsets.symmetric(horizontal: 16),
+            indicatorPadding: const EdgeInsets.symmetric(horizontal: 4),
             labelStyle: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 16,
@@ -746,7 +1098,7 @@ class _GameScreenState extends State<GameScreen>
               fontSize: 14,
             ),
             indicator: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(2),
               gradient: LinearGradient(
                 colors: [
                   Colors.amber.shade600,
@@ -834,11 +1186,18 @@ class _GameScreenState extends State<GameScreen>
 
                         // Statistiques
                         Container(
-                          padding: const EdgeInsets.all(20),
+                          padding: const EdgeInsets.all(16),
                           margin: const EdgeInsets.all(15),
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(15),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Colors.white,
+                                Colors.orange.shade50,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.1),
@@ -846,6 +1205,10 @@ class _GameScreenState extends State<GameScreen>
                                 offset: const Offset(0, 3),
                               ),
                             ],
+                            border: Border.all(
+                              color: Colors.orange.shade200,
+                              width: 1.5,
+                            ),
                           ),
                           child: Column(
                             children: [
@@ -853,20 +1216,115 @@ class _GameScreenState extends State<GameScreen>
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text(
-                                    'Production:',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.amber.shade700,
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color:
+                                                  Colors.black.withOpacity(0.2),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(
+                                          Icons.bolt,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Puissance',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                          Text(
+                                            _formatNumber(_puissance),
+                                            style: TextStyle(
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.deepOrange.shade800,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
-                                  Text(
-                                    '${_nombreDeClones + _techniques.fold(0, (sum, t) => sum + (t.niveau * t.puissanceParSeconde)) + _senseis.fold(0, (sum, s) => sum + s.getTotalXpPerSecond())}/sec',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green[700],
-                                    ),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.shade600,
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color:
+                                                  Colors.black.withOpacity(0.2),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(
+                                          Icons.speed,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Production',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                _formatNumber(_senseis.fold(
+                                                    0,
+                                                    (sum, s) =>
+                                                        sum +
+                                                        s.getTotalXpPerSecond())),
+                                                style: TextStyle(
+                                                  fontSize: 22,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.green.shade800,
+                                                ),
+                                              ),
+                                              Text(
+                                                '/s',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.green.shade800,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -883,19 +1341,10 @@ class _GameScreenState extends State<GameScreen>
                   child: TabBarView(
                     children: [
                       // Onglet des techniques
-                      TechniqueList(
-                        techniques: _techniques,
-                        puissance: _puissance,
-                        onAcheterTechnique: _acheterTechnique,
-                      ),
+                      _buildTechniquesList(),
 
                       // Onglet des senseis
-                      SenseiList(
-                        senseis: _senseis,
-                        puissance: _puissance,
-                        onAcheterSensei: _acheterSensei,
-                        onAmeliorerSensei: _ameliorerSensei,
-                      ),
+                      _buildSenseisList(),
                     ],
                   ),
                 ),
@@ -939,5 +1388,581 @@ class _GameScreenState extends State<GameScreen>
         padding: const EdgeInsets.all(8),
       ),
     );
+  }
+
+  // Méthode pour formater les grands nombres
+  String _formatNumber(num number) {
+    if (number >= 1000000000) {
+      return '${(number / 1000000000).toStringAsFixed(1)}B';
+    } else if (number >= 1000000) {
+      return '${(number / 1000000).toStringAsFixed(1)}M';
+    } else if (number >= 1000) {
+      return '${(number / 1000).toStringAsFixed(1)}K';
+    } else {
+      return number.toString();
+    }
+  }
+
+  // Formater le temps écoulé depuis la dernière connexion
+  String _formatTimeSinceLastConnection(Duration duration) {
+    if (duration.inDays > 0) {
+      return '${duration.inDays} jour${duration.inDays > 1 ? 's' : ''}';
+    } else if (duration.inHours > 0) {
+      return '${duration.inHours} heure${duration.inHours > 1 ? 's' : ''}';
+    } else if (duration.inMinutes > 0) {
+      return '${duration.inMinutes} minute${duration.inMinutes > 1 ? 's' : ''}';
+    } else {
+      return '${duration.inSeconds} seconde${duration.inSeconds > 1 ? 's' : ''}';
+    }
+  }
+
+  // Afficher une boîte de dialogue pour les gains obtenus hors ligne
+  void _showOfflineGainDialog(int xpGained, Duration timeSinceLastConnection) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Gains pendant votre absence',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.deepOrange.shade800,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                'Pendant votre absence de ${_formatTimeSinceLastConnection(timeSinceLastConnection)}, vos senseis ont généré:'),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.bolt, color: Colors.amber.shade700, size: 28),
+                const SizedBox(width: 8),
+                Text(
+                  '+${_formatNumber(xpGained)} XP',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.deepOrange.shade800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Continuez à recruter des senseis pour gagner plus de puissance même lorsque vous êtes absent !',
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepOrange.shade600,
+            ),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child:
+                const Text('Genial !', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Affichage amélioré de la liste des techniques
+  Widget _buildTechniquesList() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white,
+            Colors.orange.shade50,
+          ],
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.bolt, color: Colors.deepOrange.shade800),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Techniques Ninja',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  'Total: ${_techniques.length}',
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              itemCount: _techniques.length,
+              itemBuilder: (context, index) {
+                final technique = _techniques[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: technique.niveau > 0
+                          ? Colors.deepOrange.shade200
+                          : Colors.transparent,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Avatar de la technique
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.deepOrange.shade100,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Icon(
+                              _getTechniqueIcon(technique),
+                              color: Colors.deepOrange.shade800,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Zone centrale: nom, niveau, description
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Nom de la technique
+                              Text(
+                                technique.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              // Description
+                              Text(
+                                technique.description,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade700,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              // Badge de niveau
+                              if (technique.niveau > 0)
+                                Container(
+                                  margin: const EdgeInsets.only(top: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.deepOrange.shade800,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    'Niv. ${technique.niveau}',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        // Bouton d'achat
+                        SizedBox(
+                          height: 24,
+                          child: ElevatedButton(
+                            onPressed: _puissance >= technique.cost
+                                ? () => _acheterTechnique(technique)
+                                : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.deepOrange.shade600,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 0,
+                              ),
+                            ),
+                            child: Text(
+                              _formatNumber(technique.cost),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Affichage amélioré de la liste des senseis
+  Widget _buildSenseisList() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white,
+            Colors.blue.shade50,
+          ],
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.people, color: Colors.indigo.shade800),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Senseis',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  'Total: ${_senseis.length}',
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              itemCount: _senseis.length,
+              itemBuilder: (context, index) {
+                final sensei = _senseis[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: sensei.quantity > 0
+                          ? Colors.indigo.shade200
+                          : Colors.transparent,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Première ligne: Avatar, Nom et Badges
+                        Row(
+                          children: [
+                            // Avatar du sensei
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade100,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  Icons.person,
+                                  color: Colors.indigo.shade800,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Nom et badges
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          sensei.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Row(
+                                    children: [
+                                      if (sensei.quantity > 0)
+                                        Container(
+                                          margin:
+                                              const EdgeInsets.only(right: 4),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.indigo.shade800,
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                          ),
+                                          child: Text(
+                                            'x${sensei.quantity}',
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      if (sensei.level > 1)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.amber.shade700,
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                          ),
+                                          child: Text(
+                                            'Niv. ${sensei.level}',
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Production par seconde
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade100,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${_formatNumber(sensei.getTotalXpPerSecond())}/s',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: Colors.green.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        // Description du sensei
+                        Padding(
+                          padding: const EdgeInsets.only(
+                              top: 4, bottom: 4, left: 48),
+                          child: Text(
+                            sensei.description,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+
+                        // Boutons d'action
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            // Bouton d'achat (uniquement si quantity = 0)
+                            if (sensei.quantity == 0)
+                              SizedBox(
+                                height: 24,
+                                child: ElevatedButton(
+                                  onPressed:
+                                      _puissance >= sensei.getCurrentCost()
+                                          ? () => _acheterSensei(sensei)
+                                          : null,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.indigo.shade600,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 0,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _formatNumber(sensei.getCurrentCost()),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            // Bouton d'amélioration (toujours visible si quantity > 0)
+                            if (sensei.quantity > 0)
+                              SizedBox(
+                                height: 24,
+                                child: ElevatedButton(
+                                  onPressed:
+                                      _puissance >= sensei.getCurrentCost() * 2
+                                          ? () => _ameliorerSensei(sensei)
+                                          : null,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.amber.shade700,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 0,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _formatNumber(
+                                            sensei.getCurrentCost() * 2),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.upgrade,
+                                        size: 12,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Obtenir l'icône appropriée pour une technique
+  IconData _getTechniqueIcon(Technique technique) {
+    switch (technique.effect) {
+      case 'damage':
+        return Icons.flash_on;
+      case 'clone':
+        return Icons.people;
+      case 'boost':
+        return Icons.trending_up;
+      case 'warp':
+        return Icons.sync;
+      case 'summon':
+        return Icons.pets;
+      case 'area_damage':
+        return Icons.radar;
+      case 'copy':
+        return Icons.remove_red_eye;
+      default:
+        return Icons.extension;
+    }
   }
 }

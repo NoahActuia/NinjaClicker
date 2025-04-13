@@ -44,6 +44,10 @@ dependencies:
   firebase_analytics: ^11.4.5
   firebase_crashlytics: ^4.3.5
   image: ^4.5.4
+  flutter_launcher_icons: ^0.14.3
+  video_player: ^2.9.5
+  chewie: ^1.11.1
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:
@@ -76,6 +80,9 @@ flutter:
     - assets/images/naruto_chakra4.png
     - assets/images/background.webp
     - assets/images/logo.png
+    - assets/images/kai_symbol.png
+    - assets/images/fracture_overlay.png
+    - assets/images/icon.png
     # Images des missions
     - assets/images/academy.webp
     - assets/images/chunin_exam.webp
@@ -92,6 +99,19 @@ flutter:
     - assets/sounds/technique_substitution.mp3
     - assets/sounds/technique_rasengan_geant.mp3
     - assets/sounds/technique_mode_sage_parfait.mp3
+    - assets/sounds/intro.mp3
+    # Vidéos
+    - assets/videos/
+    # Images d'intro
+    - assets/images/intro/
+    - assets/images/intro/intro1.png
+    - assets/images/intro/intro2.jpg
+    - assets/images/intro/intro3.png
+    - assets/images/intro/intro4.png
+    - assets/images/intro/intro5.png
+    - assets/images/intro/intro6.png
+    - assets/images/intro/intro7.png
+    - assets/images/intro/intro8.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

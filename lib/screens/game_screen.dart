@@ -9,6 +9,7 @@ import '../services/audio_service.dart';
 import '../services/save_service.dart';
 import 'welcome_screen.dart';
 import 'story/story_screen.dart';
+import 'intro_video_screen.dart'; // Pour accéder à KaiColors
 import '../widgets/chakra_button.dart';
 import '../widgets/technique_list.dart';
 import '../widgets/sensei_list.dart';
@@ -35,7 +36,6 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen>
     with SingleTickerProviderStateMixin {
-  int _puissance = 0;
   late Timer _timer;
   late Timer? _autoSaveTimer;
   Timer? _chakraSoundTimer; // Timer pour le son du chakra
@@ -47,6 +47,15 @@ class _GameScreenState extends State<GameScreen>
   int _totalXP = 0;
   int _playerLevel = 1;
   int _xpForNextLevel = 100;
+  int _power = 0; // Score de puissance basé sur les techniques
+
+  // Variables pour le suivi du gain d'XP
+  double _xpPerSecondPassive = 0; // XP gagnée passivement par seconde
+  double _xpFromClicks = 0; // XP gagnée par les clics récents
+  double _totalXpPerSecond = 0; // XP totale par seconde (passive + clics)
+  DateTime _lastClickTime = DateTime.now(); // Horodatage du dernier clic
+  List<DateTime> _clicksInLastSecond = []; // Liste des gains des clics récents
+  Timer? _xpRateTimer; // Timer pour calculer le taux d'XP par seconde
 
   // Constantes pour le calcul du niveau
   final int _baseXPForLevel = 100;
@@ -54,6 +63,20 @@ class _GameScreenState extends State<GameScreen>
 
   // Liste des senseis
   List<Sensei> _senseis = [];
+
+  // Nouvelles variables pour stocker les données du joueur
+  int _playerStrength = 10;
+  int _playerAgility = 10;
+  int _playerChakra = 10;
+  int _playerSpeed = 10;
+  int _playerDefense = 10;
+  int _xpPerClick = 1;
+  int _passiveXp = 0;
+  List<Technique> _playerTechniques = [];
+  List<Sensei> _playerSenseis = [];
+  Map<String, int> _techniqueLevels = {};
+  Map<String, int> _senseiLevels = {};
+  Map<String, int> _senseiQuantities = {};
 
   // Services
   final AudioService _audioService = AudioService();
@@ -97,10 +120,46 @@ class _GameScreenState extends State<GameScreen>
   void _addXP(int amount) {
     setState(() {
       _totalXP += amount;
-      _puissance += amount;
+      // Ne plus augmenter la puissance directement
     });
 
     _updatePlayerLevel();
+    _calculatePower(); // Recalculer la puissance basée sur les techniques
+  }
+
+  // Calculer la puissance basée sur la moyenne des niveaux des techniques
+  void _calculatePower() {
+    int totalTechniqueLevels = 0;
+    int activeTechniques = 0;
+
+    for (var technique in _techniques) {
+      if (technique.niveau > 0) {
+        totalTechniqueLevels += technique.niveau;
+        activeTechniques++;
+      }
+    }
+
+    if (activeTechniques == 0) {
+      setState(() {
+        _power = 0;
+      });
+    } else {
+      // Calculer la puissance en fonction de la moyenne des niveaux des techniques
+      int avgTechniqueLevel = totalTechniqueLevels ~/ activeTechniques;
+      int newPower = (avgTechniqueLevel * 15).toInt();
+
+      // Bonus pour chaque technique active
+      newPower += activeTechniques * 5;
+
+      setState(() {
+        _power = newPower;
+      });
+    }
+
+    // Mettre à jour le ninja si nécessaire
+    if (_currentNinja != null) {
+      _currentNinja!.power = _power;
+    }
   }
 
   // Initialisation des techniques
@@ -164,6 +223,9 @@ class _GameScreenState extends State<GameScreen>
 
     // Initialiser le jeu dans un ordre précis
     _initializeGame();
+
+    // Démarrer le calcul du taux d'XP par seconde
+    _startXpRateCalculation();
   }
 
   @override
@@ -172,6 +234,7 @@ class _GameScreenState extends State<GameScreen>
     _timer.cancel();
     _autoSaveTimer?.cancel();
     _chakraSoundTimer?.cancel();
+    _xpRateTimer?.cancel();
 
     // Arrêter et libérer les ressources audio
     _audioService.dispose();
@@ -190,570 +253,159 @@ class _GameScreenState extends State<GameScreen>
     await _audioService.startAmbiance();
   }
 
-  // Méthode pour initialiser le jeu dans le bon ordre
+  // Méthode pour initialiser le jeu
   Future<void> _initializeGame() async {
-    try {
-      print('==================== INITIALISATION DU JEU ====================');
+    print('Initialisation du jeu...');
+    // Réinitialiser l'état du jeu avant de charger un nouveau ninja
+    _resetGameState();
 
-      // Étape 1: Charger toutes les techniques disponibles
-      await _initTechniques();
-      print('Étape 1: Initialisation des techniques terminée');
-
-      // Étape 2: Charger la sauvegarde si elle existe
-      if (widget.savedGame != null) {
-        _loadGameData(widget.savedGame!);
-        print('Étape 2: Chargement de la sauvegarde terminé');
-      }
-
-      // Étape 3: Charger le ninja de l'utilisateur (qui chargera ses techniques et ses senseis)
-      await _loadCurrentNinja();
-      print('Étape 3: Chargement du ninja et de ses données terminé');
-
-      // Étape 4: Démarrer la génération automatique de puissance
-      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        _genererPuissanceAutomatique();
-      });
-      print('Étape 4: Génération automatique de puissance démarrée');
-
-      // Étape 5: Configurer la sauvegarde automatique toutes les 2 minutes
-      _autoSaveTimer =
-          Timer.periodic(const Duration(minutes: 2), (timer) async {
-        await _saveGame();
-        print('Sauvegarde automatique effectuée');
-      });
-      print('Étape 5: Sauvegarde automatique configurée');
-
-      print(
-          '==================== INITIALISATION TERMINÉE ====================');
-    } catch (e) {
-      print('⚠️ Erreur lors de l\'initialisation du jeu: $e');
+    // Vérifier si un joueur est connecté
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      print('Utilisateur non connecté');
+      return;
     }
+
+    // Chargement du ninja actuel
+    await _loadCurrentNinja();
+
+    // Charger les techniques et senseis du joueur
+    await _loadPlayerTechniques();
+    await _loadPlayerSenseis();
+
+    // Démarrer le timer pour les calculs par seconde
+    _startTimer();
+
+    print('Jeu initialisé avec succès');
   }
 
-  // Charger les données d'une sauvegarde
-  void _loadGameData(SavedGame savedGame) {
+  // Réinitialiser l'état du jeu
+  void _resetGameState() {
     setState(() {
-      _puissance = savedGame.puissance;
-
-      // Fusionner les techniques sauvegardées avec les techniques initiales
-      for (int i = 0; i < _techniques.length; i++) {
-        if (i < savedGame.techniques.length) {
-          _techniques[i].niveau = savedGame.techniques[i].niveau;
-        }
-      }
+      _totalXP = 0;
+      _power = 0;
+      _playerLevel = 1;
+      _playerStrength = 10;
+      _playerAgility = 10;
+      _playerChakra = 10;
+      _playerSpeed = 10;
+      _playerDefense = 10;
+      _xpPerClick = 1;
+      _passiveXp = 0;
+      _currentNinja = null;
+      _techniques.clear();
+      _senseis.clear();
+      _playerTechniques = [];
+      _playerSenseis = [];
+      _techniqueLevels = {};
+      _senseiLevels = {};
+      _senseiQuantities = {};
+      _xpPerSecondPassive = 0;
+      _xpFromClicks = 0;
+      _totalXpPerSecond = 0;
+      _clicksInLastSecond = [];
     });
   }
 
-  void _genererPuissanceAutomatique() {
-    int generatedXP = 0;
-
-    // XP générée uniquement par les senseis
-    for (var sensei in _senseis) {
-      generatedXP += sensei.getTotalXpPerSecond();
-    }
-
-    // Ajouter l'XP générée
-    if (generatedXP > 0) {
-      _addXP(generatedXP);
-    }
-  }
-
-  void _incrementerPuissance(int bonusXp, double multiplier) {
-    // Calculer le gain total : base (1) * multiplicateur + bonus
-    int baseXp = 1;
-    int gainTotal = (baseXp * multiplier).floor() + bonusXp;
-
-    // Ajouter le gain total d'XP
-    _addXP(gainTotal);
-
-    // Gérer le son du chakra
-    if (!_audioService.isEffectsSoundPlaying) {
-      // Si le son n'est pas en cours de lecture, le démarrer
-      _audioService.playChakraSound();
-    }
-
-    // Annuler le timer précédent s'il existe
-    _chakraSoundTimer?.cancel();
-
-    // Créer un nouveau timer pour arrêter le son après un délai
-    _chakraSoundTimer = Timer(const Duration(milliseconds: 1000), () {
-      // Arrêter le son en fondu progressif
-      _audioService.fadeOutChakraSound();
-    });
-  }
-
-  // Méthode pour acheter une technique
-  void _acheterTechnique(Technique technique) {
-    if (_puissance >= technique.cost) {
-      // Sauvegarder l'état précédent pour pouvoir annuler en cas d'erreur
-      final previousLevel = technique.niveau;
-
-      // Mettre à jour l'état localement
-      setState(() {
-        _puissance -= technique.cost;
-        technique.level =
-            technique.level + 1; // Modifier directement level au lieu de niveau
-      });
-
-      // Sauvegarder l'achat de la technique dans Firebase
-      if (_currentNinja != null) {
-        try {
-          print('==================== ACHAT DE TECHNIQUE ====================');
-          print('ID de la technique à acheter: ${technique.id}');
-          print('Niveau avant achat: ${previousLevel}');
-          print('Nouveau niveau: ${technique.niveau}');
-
-          // Utiliser addTechniqueToNinja qui gère l'ajout ou mise à jour
-          _ninjaService
-              .addTechniqueToNinja(_currentNinja!.id, technique.id)
-              .then((_) {
-            print('✅ Technique sauvegardée en DB: ${technique.name}');
-
-            // Vérifier que la technique apparaît bien comme apprise
-            print('Level final: ${technique.level}');
-            print('Niveau final: ${technique.niveau}');
-
-            // Jouer le son de la technique
-            _audioService.playTechniqueSound(technique.son);
-
-            // Force la mise à jour de l'interface
-            setState(() {});
-
-            // Sauvegarde complète
-            _saveGame();
-          }).catchError((error) {
-            // En cas d'erreur, restaurer l'état précédent
-            setState(() {
-              _puissance += technique.cost;
-              technique.level = previousLevel;
-            });
-
-            print('⚠️ Erreur lors de l\'achat de la technique: $error');
-          });
-        } catch (e) {
-          // En cas d'erreur, restaurer l'état précédent
-          setState(() {
-            _puissance += technique.cost;
-            technique.level = previousLevel;
-          });
-
-          print('⚠️ Erreur lors de l\'achat de la technique: $e');
-        }
-      }
-    }
-  }
-
-  // Méthode pour acheter un sensei
-  void _acheterSensei(Sensei sensei) {
-    final cout = sensei.getCurrentCost();
-    // Vérifier que le sensei n'a pas déjà été acheté
-    if (_puissance >= cout && sensei.quantity == 0) {
-      setState(() {
-        _puissance -= cout;
-        sensei.quantity += 1;
-      });
-
-      // Sauvegarder dans Firebase
-      if (_currentNinja != null) {
-        _ninjaService.addSenseiToNinja(_currentNinja!.id, sensei.id);
-        print(
-            'Sensei ${sensei.name} ajouté au ninja ${_currentNinja!.name} (Quantité: ${sensei.quantity})');
-
-        // Sauvegarde automatique après l'achat d'un sensei
-        _saveGame();
-      }
-    }
-  }
-
-  // Méthode pour améliorer un sensei
-  void _ameliorerSensei(Sensei sensei) {
-    // Coût d'amélioration (par exemple 2x le coût d'achat)
-    final cout = sensei.getCurrentCost() * 2;
-    if (_puissance >= cout && sensei.quantity > 0) {
-      setState(() {
-        _puissance -= cout;
-        sensei.level += 1;
-      });
-
-      // Sauvegarder dans Firebase
-      if (_currentNinja != null) {
-        _ninjaService.upgradeSensei(_currentNinja!.id, sensei.id);
-        print('Sensei ${sensei.name} amélioré au niveau ${sensei.level}');
-
-        // Sauvegarde automatique après l'amélioration d'un sensei
-        _saveGame();
-      }
-    }
-  }
-
-  // Charger les senseis depuis Firebase
-  Future<void> _loadSenseis() async {
-    try {
-      // D'abord charger tous les senseis disponibles
-      final snapshot =
-          await FirebaseFirestore.instance.collection('senseis').get();
-
-      if (snapshot.docs.isEmpty) {
-        print('Aucun sensei trouvé dans Firebase');
-        return;
-      }
-
-      // Liste des senseis disponibles
-      final availableSenseis =
-          snapshot.docs.map((doc) => Sensei.fromFirestore(doc)).toList();
-
-      setState(() {
-        _senseis = availableSenseis;
-      });
-
-      print('${_senseis.length} senseis chargés depuis Firebase');
-
-      // Ensuite, si un ninja est actif, charger ses senseis pour les niveaux et quantités
-      if (_currentNinja != null) {
-        final ninjaSenseis =
-            await _ninjaService.getNinjaSenseis(_currentNinja!.id);
-
-        if (ninjaSenseis.isNotEmpty) {
-          setState(() {
-            // Mettre à jour les niveaux et quantités des senseis existants
-            for (var ninjaSensei in ninjaSenseis) {
-              final index = _senseis.indexWhere((s) => s.id == ninjaSensei.id);
-              if (index >= 0) {
-                _senseis[index].level = ninjaSensei.level;
-                _senseis[index].quantity = ninjaSensei.quantity;
-              }
-            }
-          });
-
-          print(
-              'Niveaux et quantités des senseis mis à jour: ${ninjaSenseis.length} senseis du ninja');
-        }
-      }
-    } catch (e) {
-      print('Erreur lors du chargement des senseis: $e');
-    }
-  }
-
-  // Sauvegarder la partie actuelle
-  Future<void> _saveGame() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-
-      if (user != null && _currentNinja != null) {
-        // Mettre à jour le ninja avec les valeurs actuelles
-        _currentNinja!.xp = _puissance;
-        _currentNinja!.level = _playerLevel;
-
-        // Mettre à jour les autres attributs du ninja selon les besoins
-        _currentNinja!.passiveXp =
-            _senseis.fold(0, (sum, s) => sum + s.getTotalXpPerSecond()).toInt();
-
-        // Mettre à jour la date de dernière connexion
-        _currentNinja!.lastConnected = DateTime.now();
-
-        // Mettre à jour le ninja dans Firebase
-        await _ninjaService.updateNinja(_currentNinja!);
-        print(
-            'Ninja sauvegardé: ${_currentNinja!.name} (${_currentNinja!.xp} XP, niveau ${_currentNinja!.level})');
-
-        // Sauvegarde des techniques - DEBUG
-        print(
-            '==================== SAUVEGARDE DES TECHNIQUES ====================');
-        print('Nombre total de techniques: ${_techniques.length}');
-
-        int techniquesSauvegardees = 0;
-
-        // Mettre à jour les techniques du ninja
-        for (var technique in _techniques) {
-          if (technique.niveau > 0) {
-            print(
-                'Sauvegarde de la technique ${technique.name} (ID: ${technique.id}, niveau ${technique.niveau})');
-
-            try {
-              // Vérifier que l'ID est valide
-              if (technique.id.isEmpty) {
-                print('⚠️ ERREUR: ID de technique vide!');
-                continue;
-              }
-
-              // Sauvegarder la technique
-              await _ninjaService.addTechniqueToNinja(
-                  _currentNinja!.id, technique.id);
-              techniquesSauvegardees++;
-            } catch (e) {
-              print(
-                  '⚠️ Erreur lors de la sauvegarde de la technique ${technique.name}: $e');
-            }
-          }
-        }
-
-        print(
-            'Techniques sauvegardées: $techniquesSauvegardees / ${_techniques.length}');
-        print(
-            '=================================================================');
-
-        // Mettre à jour les senseis
-        for (var sensei in _senseis) {
-          if (sensei.quantity > 0) {
-            // Vérifier si le sensei existe déjà pour le ninja
-            final querySnapshot = await FirebaseFirestore.instance
-                .collection('ninjaSenseis')
-                .where('ninjaId', isEqualTo: _currentNinja!.id)
-                .where('senseiId', isEqualTo: sensei.id)
-                .get();
-
-            if (querySnapshot.docs.isNotEmpty) {
-              // Mettre à jour le sensei existant
-              final docId = querySnapshot.docs.first.id;
-              await FirebaseFirestore.instance
-                  .collection('ninjaSenseis')
-                  .doc(docId)
-                  .update({
-                'quantity': sensei.quantity,
-                'level': sensei.level,
-              });
-            } else {
-              // Ajouter un nouveau sensei
-              await _ninjaService.addSenseiToNinja(
-                  _currentNinja!.id, sensei.id);
-            }
-          }
-        }
-        print('Senseis sauvegardés: ${_senseis.length}');
-      } else {
-        print(
-            'Impossible de sauvegarder: pas de ninja ou d\'utilisateur connecté');
-      }
-    } catch (e) {
-      print('Erreur lors de la sauvegarde: $e');
-    }
-  }
-
-  // Méthode pour afficher la boîte de dialogue de sauvegarde
-  void _showSaveDialog() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Partie sauvegardée !'),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-      ),
-    );
-    _saveGame();
-  }
-
-  // Méthode pour afficher la boîte de dialogue des paramètres
-  void _showSettingsDialog() {
-    showSettingsDialog(
-      context: context,
-      audioService: _audioService,
-    );
-  }
-
-  // Méthode pour retourner au menu principal
-  void _returnToMainMenu() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text(
-            'Quitter la partie',
-            style: TextStyle(
-              color: Colors.red,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: const Text('Voulez-vous vraiment quitter le jeu ?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Annuler',
-                style: TextStyle(color: Colors.grey),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                // S'assurer que lastConnected est mis à jour avant de quitter
-                if (_currentNinja != null) {
-                  _currentNinja!.lastConnected = DateTime.now();
-                }
-
-                // Sauvegarder automatiquement avant de quitter
-                await _saveGame();
-
-                if (context.mounted) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const WelcomeScreen()),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade600,
-              ),
-              child: const Text(
-                'Quitter',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Méthode pour aller au mode histoire
-  void _goToStoryMode() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => StoryScreen(
-          puissance: _puissance,
-          onMissionComplete:
-              (missionPuissance, missionClones, missionTechniques) {
-            setState(() {
-              _puissance += missionPuissance;
-              // Nous ignorons missionClones car les clones ne sont plus utilisés
-
-              // Ajouter les techniques gagnées
-              print(
-                  '==================== TECHNIQUES GAGNÉES EN MISSION ====================');
-              print(
-                  'Nombre de techniques gagnées: ${missionTechniques.length}');
-
-              for (var technique in missionTechniques) {
-                print(
-                    'Technique gagnée: ${technique.name} (ID: ${technique.id})');
-
-                // S'assurer que la technique a un ID valide
-                if (technique.id.isEmpty) {
-                  print('⚠️ Technique sans ID! Impossible de l\'ajouter.');
-                  continue;
-                }
-
-                // Vérifier si la technique existe déjà
-                var existingTechnique = _techniques.firstWhere(
-                  (t) => t.id == technique.id,
-                  orElse: () => technique,
-                );
-
-                if (!_techniques.contains(existingTechnique)) {
-                  _techniques.add(existingTechnique);
-                  print(
-                      '➕ Nouvelle technique ajoutée: ${existingTechnique.name}');
-                }
-
-                existingTechnique.niveau += 1;
-                print(
-                    '✅ Niveau de la technique ${existingTechnique.name} augmenté à ${existingTechnique.niveau}');
-
-                // Sauvegarder immédiatement la technique
-                if (_currentNinja != null) {
-                  _ninjaService.addTechniqueToNinja(
-                      _currentNinja!.id, existingTechnique.id);
-                }
-              }
-
-              // Sauvegarde complète après la mission
-              _saveGame();
-              print(
-                  '=================================================================');
-            });
-          },
-        ),
-      ),
-    );
-  }
-
-  // Méthode pour charger le ninja de l'utilisateur courant
+  // Charger le ninja actuel
   Future<void> _loadCurrentNinja() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        // Récupérer les ninjas de l'utilisateur
         final ninjas = await _ninjaService.getNinjasByUser(user.uid);
+
         if (ninjas.isNotEmpty) {
-          final ninja = ninjas.first;
-
-          // Calcul de l'XP gagnée pendant l'absence du joueur
-          final now = DateTime.now();
-          final lastConnected = ninja.lastConnected;
-          final Duration timeSinceLastConnection =
-              now.difference(lastConnected);
-
-          // Charger les senseis avant de calculer l'XP passive
-          _currentNinja = ninja;
-          await _loadSenseis();
-
-          // Calculer l'XP passive gagnée (secondes × taux par seconde)
-          int passiveXpRate =
-              ninja.passiveXp; // Taux déjà enregistré dans le ninja
-
-          // Double vérification avec les senseis actuels
-          int currentPassiveRate =
-              _senseis.fold(0, (sum, s) => sum + s.getTotalXpPerSecond());
-
-          // Utiliser le taux le plus élevé pour être généreux envers le joueur
-          passiveXpRate = max(passiveXpRate, currentPassiveRate);
-
-          // Limiter le calcul à 24 heures pour éviter des gains excessifs
-          final int secondsAway =
-              min(timeSinceLastConnection.inSeconds, 24 * 60 * 60);
-          final int offlineXpGain = passiveXpRate * secondsAway;
-
-          // Mettre à jour le ninja avec l'XP gagnée hors ligne et la nouvelle heure de connexion
-          if (offlineXpGain > 0) {
-            ninja.xp += offlineXpGain;
-
-            // Mettre à jour le ninja dans la base de données
-            ninja.lastConnected = now;
-            await _ninjaService.updateNinja(ninja);
-
-            // Afficher une notification sur les gains hors ligne
-            if (mounted && offlineXpGain > 0) {
-              // Délai pour s'assurer que l'interface est chargée
-              Future.delayed(const Duration(milliseconds: 500), () {
-                if (mounted) {
-                  _showOfflineGainDialog(
-                      offlineXpGain, timeSinceLastConnection);
-                }
-              });
-            }
+          // Si un nom est spécifié, chercher le ninja correspondant
+          if (widget.playerName != null && widget.playerName!.isNotEmpty) {
+            _currentNinja = ninjas.firstWhere(
+              (ninja) => ninja.name == widget.playerName,
+              orElse: () => ninjas.first,
+            );
           } else {
-            // Simplement mettre à jour l'heure de connexion
-            ninja.lastConnected = now;
-            await _ninjaService.updateNinja(ninja);
+            // Sinon, prendre le premier ninja
+            _currentNinja = ninjas.first;
           }
 
+          // Mettre à jour les données du joueur
           setState(() {
-            _currentNinja = ninja;
-            _puissance = _currentNinja!
-                .xp; // Synchroniser la puissance avec l'XP du ninja
-            _totalXP = _currentNinja!.xp; // Initialiser l'XP totale
-            _playerLevel = _currentNinja!.level; // Initialiser le niveau
-            _xpForNextLevel = _calculateXPForNextLevel(
-                _playerLevel); // Calculer l'XP pour le niveau suivant
+            _totalXP = _currentNinja!.xp;
+            _playerLevel = _currentNinja!.level;
+            _playerStrength = _currentNinja!.strength;
+            _playerAgility = _currentNinja!.agility;
+            _playerChakra = _currentNinja!.chakra;
+            _playerSpeed = _currentNinja!.speed;
+            _playerDefense = _currentNinja!.defense;
+            _xpPerClick = _currentNinja!.xpPerClick;
+            _passiveXp = _currentNinja!.passiveXp;
+            _xpForNextLevel = _playerLevel * 100;
           });
 
-          print(
-              'Ninja chargé: ${_currentNinja!.name} (${_currentNinja!.xp} XP, niveau ${_currentNinja!.level})');
-          if (offlineXpGain > 0) {
-            print(
-                'Gain hors ligne: +$offlineXpGain XP (${_formatTimeSinceLastConnection(timeSinceLastConnection)})');
-          }
-
-          // Charger les techniques du ninja
-          await _loadTechniques();
-
-          // Senseis déjà chargés plus haut
+          // Charger les techniques et senseis
+          await _loadPlayerTechniques();
+          await _loadPlayerSenseis();
         } else {
-          print('Aucun ninja trouvé pour l\'utilisateur ${user.uid}');
+          print("Aucun ninja trouvé pour cet utilisateur");
         }
-      } else {
-        print('Aucun utilisateur connecté');
+      } catch (e) {
+        print("Erreur lors du chargement du ninja: $e");
+      }
+    } else {
+      print("Aucun utilisateur connecté");
+    }
+  }
+
+  // Charger les techniques du joueur
+  Future<void> _loadPlayerTechniques() async {
+    if (_currentNinja == null) {
+      print("Aucun ninja actif pour charger les techniques");
+      return;
+    }
+
+    try {
+      await _loadTechniques();
+
+      if (_techniques.isNotEmpty && _currentNinja!.techniques.isNotEmpty) {
+        setState(() {
+          _playerTechniques = _techniques
+              .where((technique) =>
+                  _currentNinja!.techniques.contains(technique.id))
+              .toList();
+
+          _techniqueLevels =
+              Map<String, int>.from(_currentNinja!.techniqueLevels);
+        });
+        print("Techniques du joueur chargées: ${_playerTechniques.length}");
       }
     } catch (e) {
-      print('Erreur lors du chargement du ninja: $e');
+      print("Erreur lors du chargement des techniques du joueur: $e");
+    }
+  }
+
+  // Charger les senseis du joueur
+  Future<void> _loadPlayerSenseis() async {
+    if (_currentNinja == null) {
+      print("Aucun ninja actif pour charger les senseis");
+      return;
+    }
+
+    try {
+      await _loadSenseis();
+
+      if (_senseis.isNotEmpty && _currentNinja!.senseis.isNotEmpty) {
+        setState(() {
+          _playerSenseis = _senseis
+              .where((sensei) => _currentNinja!.senseis.contains(sensei.id))
+              .toList();
+
+          _senseiLevels = Map<String, int>.from(_currentNinja!.senseiLevels);
+          _senseiQuantities =
+              Map<String, int>.from(_currentNinja!.senseiQuantities);
+        });
+        print("Senseis du joueur chargés: ${_playerSenseis.length}");
+      }
+    } catch (e) {
+      print("Erreur lors du chargement des senseis du joueur: $e");
     }
   }
 
@@ -890,7 +542,7 @@ class _GameScreenState extends State<GameScreen>
       child: Scaffold(
         appBar: AppBar(
           toolbarHeight: 80,
-          backgroundColor: Colors.deepOrange.shade900,
+          backgroundColor: KaiColors.background,
           elevation: 12,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(
@@ -903,9 +555,9 @@ class _GameScreenState extends State<GameScreen>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Colors.deepOrange.shade800,
-                  Colors.orange.shade700,
-                  Colors.amber.shade600,
+                  KaiColors.background,
+                  KaiColors.background.withOpacity(0.7),
+                  KaiColors.kaiNeutral.withOpacity(0.6),
                 ],
               ),
               boxShadow: [
@@ -950,8 +602,8 @@ class _GameScreenState extends State<GameScreen>
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Colors.deepOrange.shade900,
-                          Colors.deepOrange.shade700,
+                          KaiColors.background,
+                          KaiColors.background.withOpacity(0.7),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(15),
@@ -984,7 +636,7 @@ class _GameScreenState extends State<GameScreen>
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.amber.shade800.withOpacity(0.6),
+                      color: KaiColors.kaiNeutral.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
@@ -992,7 +644,7 @@ class _GameScreenState extends State<GameScreen>
                       children: [
                         const Icon(
                           Icons.star,
-                          color: Colors.amber,
+                          color: KaiColors.kaiNeutral,
                           size: 16,
                         ),
                         const SizedBox(width: 4),
@@ -1018,8 +670,9 @@ class _GameScreenState extends State<GameScreen>
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Colors.amber.shade700,
-                    Colors.orange.shade600,
+                    KaiColors.kaiNeutral
+                        .withOpacity(0.7), // Couleur pour la puissance
+                    KaiColors.background.withOpacity(0.6),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(20),
@@ -1034,7 +687,7 @@ class _GameScreenState extends State<GameScreen>
               child: Row(
                 children: [
                   const Icon(
-                    Icons.bolt,
+                    Icons.bolt, // Icône de puissance
                     color: Colors.white,
                     size: 22,
                     shadows: [
@@ -1047,7 +700,7 @@ class _GameScreenState extends State<GameScreen>
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '$_puissance',
+                    _formatNumber(_power), // Afficher la puissance
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -1101,8 +754,8 @@ class _GameScreenState extends State<GameScreen>
               borderRadius: BorderRadius.circular(2),
               gradient: LinearGradient(
                 colors: [
-                  Colors.amber.shade600,
-                  Colors.amber.shade300,
+                  KaiColors.kaiNeutral.withOpacity(0.6),
+                  KaiColors.kaiNeutral.withOpacity(0.3),
                 ],
               ),
               boxShadow: [
@@ -1160,8 +813,8 @@ class _GameScreenState extends State<GameScreen>
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.orange[50]!.withOpacity(0.7),
-                  Colors.orange[100]!.withOpacity(0.7),
+                  Colors.white.withOpacity(0.7),
+                  Colors.white.withOpacity(0.7),
                 ],
               ),
             ),
@@ -1179,7 +832,7 @@ class _GameScreenState extends State<GameScreen>
                           child: Center(
                             child: ChakraButton(
                               onTap: _incrementerPuissance,
-                              puissance: _puissance,
+                              puissance: _totalXP,
                             ),
                           ),
                         ),
@@ -1194,7 +847,7 @@ class _GameScreenState extends State<GameScreen>
                               end: Alignment.bottomRight,
                               colors: [
                                 Colors.white,
-                                Colors.orange.shade50,
+                                Colors.white,
                               ],
                             ),
                             borderRadius: BorderRadius.circular(20),
@@ -1206,7 +859,7 @@ class _GameScreenState extends State<GameScreen>
                               ),
                             ],
                             border: Border.all(
-                              color: Colors.orange.shade200,
+                              color: KaiColors.background.withOpacity(0.2),
                               width: 1.5,
                             ),
                           ),
@@ -1221,7 +874,8 @@ class _GameScreenState extends State<GameScreen>
                                       Container(
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: Colors.amber.shade700,
+                                          color: Colors.blue
+                                              .shade600, // Couleur bleue pour l'XP
                                           shape: BoxShape.circle,
                                           boxShadow: [
                                             BoxShadow(
@@ -1233,7 +887,8 @@ class _GameScreenState extends State<GameScreen>
                                           ],
                                         ),
                                         child: const Icon(
-                                          Icons.bolt,
+                                          Icons
+                                              .whatshot, // Nouvelle icône pour l'XP
                                           color: Colors.white,
                                           size: 20,
                                         ),
@@ -1244,7 +899,7 @@ class _GameScreenState extends State<GameScreen>
                                             CrossAxisAlignment.start,
                                         children: [
                                           const Text(
-                                            'Puissance',
+                                            'XP',
                                             style: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.bold,
@@ -1252,11 +907,12 @@ class _GameScreenState extends State<GameScreen>
                                             ),
                                           ),
                                           Text(
-                                            _formatNumber(_puissance),
+                                            _formatNumber(_totalXP),
                                             style: TextStyle(
                                               fontSize: 22,
                                               fontWeight: FontWeight.bold,
-                                              color: Colors.deepOrange.shade800,
+                                              color: Colors.blue
+                                                  .shade800, // Couleur bleue pour l'XP
                                             ),
                                           ),
                                         ],
@@ -1291,7 +947,7 @@ class _GameScreenState extends State<GameScreen>
                                             CrossAxisAlignment.start,
                                         children: [
                                           const Text(
-                                            'Production',
+                                            'XP/seconde',
                                             style: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.bold,
@@ -1301,25 +957,25 @@ class _GameScreenState extends State<GameScreen>
                                           Row(
                                             children: [
                                               Text(
-                                                _formatNumber(_senseis.fold(
-                                                    0,
-                                                    (sum, s) =>
-                                                        sum +
-                                                        s.getTotalXpPerSecond())),
+                                                _formatNumber(
+                                                    _totalXpPerSecond),
                                                 style: TextStyle(
                                                   fontSize: 22,
                                                   fontWeight: FontWeight.bold,
                                                   color: Colors.green.shade800,
                                                 ),
                                               ),
-                                              Text(
-                                                '/s',
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.green.shade800,
+                                              const SizedBox(width: 4),
+                                              if (_xpFromClicks > 0)
+                                                Text(
+                                                  '(+${_formatNumber(_xpFromClicks)} clics)',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color:
+                                                        Colors.purple.shade600,
+                                                  ),
                                                 ),
-                                              ),
                                             ],
                                           ),
                                         ],
@@ -1425,7 +1081,7 @@ class _GameScreenState extends State<GameScreen>
           'Gains pendant votre absence',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: Colors.deepOrange.shade800,
+            color: KaiColors.background,
           ),
         ),
         content: Column(
@@ -1438,14 +1094,14 @@ class _GameScreenState extends State<GameScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.bolt, color: Colors.amber.shade700, size: 28),
+                Icon(Icons.bolt, color: KaiColors.kaiNeutral, size: 28),
                 const SizedBox(width: 8),
                 Text(
                   '+${_formatNumber(xpGained)} XP',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: Colors.deepOrange.shade800,
+                    color: KaiColors.background,
                   ),
                 ),
               ],
@@ -1463,7 +1119,7 @@ class _GameScreenState extends State<GameScreen>
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepOrange.shade600,
+              backgroundColor: KaiColors.background,
             ),
             onPressed: () {
               Navigator.of(context).pop();
@@ -1485,7 +1141,7 @@ class _GameScreenState extends State<GameScreen>
           end: Alignment.bottomCenter,
           colors: [
             Colors.white,
-            Colors.orange.shade50,
+            Colors.white,
           ],
         ),
       ),
@@ -1508,7 +1164,7 @@ class _GameScreenState extends State<GameScreen>
               children: [
                 Row(
                   children: [
-                    Icon(Icons.bolt, color: Colors.deepOrange.shade800),
+                    Icon(Icons.bolt, color: KaiColors.background),
                     const SizedBox(width: 8),
                     const Text(
                       'Techniques Ninja',
@@ -1542,7 +1198,7 @@ class _GameScreenState extends State<GameScreen>
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(
                       color: technique.niveau > 0
-                          ? Colors.deepOrange.shade200
+                          ? KaiColors.background.withOpacity(0.2)
                           : Colors.transparent,
                       width: 1.5,
                     ),
@@ -1557,13 +1213,13 @@ class _GameScreenState extends State<GameScreen>
                           width: 36,
                           height: 36,
                           decoration: BoxDecoration(
-                            color: Colors.deepOrange.shade100,
+                            color: KaiColors.background.withOpacity(0.1),
                             shape: BoxShape.circle,
                           ),
                           child: Center(
                             child: Icon(
                               _getTechniqueIcon(technique),
-                              color: Colors.deepOrange.shade800,
+                              color: KaiColors.background,
                               size: 18,
                             ),
                           ),
@@ -1603,7 +1259,7 @@ class _GameScreenState extends State<GameScreen>
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.deepOrange.shade800,
+                                    color: KaiColors.background,
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
@@ -1623,11 +1279,12 @@ class _GameScreenState extends State<GameScreen>
                         SizedBox(
                           height: 24,
                           child: ElevatedButton(
-                            onPressed: _puissance >= technique.cost
+                            onPressed: _totalXP >= technique.cost
                                 ? () => _acheterTechnique(technique)
                                 : null,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.deepOrange.shade600,
+                              backgroundColor: Colors
+                                  .blue.shade600, // Couleur bleue pour l'XP
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
@@ -1637,12 +1294,29 @@ class _GameScreenState extends State<GameScreen>
                                 vertical: 0,
                               ),
                             ),
-                            child: Text(
-                              _formatNumber(technique.cost),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 10,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.whatshot,
+                                    size: 10, color: Colors.white),
+                                const SizedBox(width: 2),
+                                Text(
+                                  _formatNumber(technique.cost),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                const Text(
+                                  "XP",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 8,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -1866,12 +1540,12 @@ class _GameScreenState extends State<GameScreen>
                               SizedBox(
                                 height: 24,
                                 child: ElevatedButton(
-                                  onPressed:
-                                      _puissance >= sensei.getCurrentCost()
-                                          ? () => _acheterSensei(sensei)
-                                          : null,
+                                  onPressed: _totalXP >= sensei.getCurrentCost()
+                                      ? () => _acheterSensei(sensei)
+                                      : null,
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.indigo.shade600,
+                                    backgroundColor: Colors.blue
+                                        .shade600, // Couleur bleue pour l'XP
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(8),
@@ -1881,12 +1555,29 @@ class _GameScreenState extends State<GameScreen>
                                       vertical: 0,
                                     ),
                                   ),
-                                  child: Text(
-                                    _formatNumber(sensei.getCurrentCost()),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 10,
-                                    ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.whatshot,
+                                          size: 10, color: Colors.white),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        _formatNumber(sensei.getCurrentCost()),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      const Text(
+                                        "XP",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 8,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
@@ -1896,7 +1587,7 @@ class _GameScreenState extends State<GameScreen>
                                 height: 24,
                                 child: ElevatedButton(
                                   onPressed:
-                                      _puissance >= sensei.getCurrentCost() * 2
+                                      _totalXP >= sensei.getCurrentCost() * 2
                                           ? () => _ameliorerSensei(sensei)
                                           : null,
                                   style: ElevatedButton.styleFrom(
@@ -1913,12 +1604,24 @@ class _GameScreenState extends State<GameScreen>
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
+                                      const Icon(Icons.whatshot,
+                                          size: 10, color: Colors.white),
+                                      const SizedBox(width: 2),
                                       Text(
                                         _formatNumber(
                                             sensei.getCurrentCost() * 2),
                                         style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 10,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      const Text(
+                                        "XP",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 8,
+                                          color: Colors.white,
                                         ),
                                       ),
                                       const SizedBox(width: 4),
@@ -1964,5 +1667,388 @@ class _GameScreenState extends State<GameScreen>
       default:
         return Icons.extension;
     }
+  }
+
+  // Méthode pour démarrer le timer
+  void _startTimer() {
+    // Démarrer la génération automatique de puissance
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _genererPuissanceAutomatique();
+    });
+
+    // Configurer la sauvegarde automatique toutes les 2 minutes
+    _autoSaveTimer = Timer.periodic(const Duration(minutes: 2), (timer) async {
+      await _saveGame();
+      print('Sauvegarde automatique effectuée');
+    });
+
+    // Démarrer le calcul du taux d'XP par seconde
+    _startXpRateCalculation();
+  }
+
+  // Méthode pour démarrer le calcul du taux d'XP par seconde
+  void _startXpRateCalculation() {
+    // Calcul initial
+    _updateXpPerSecond();
+
+    // Mettre à jour toutes les secondes
+    _xpRateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _updateXpPerSecond();
+    });
+  }
+
+  // Mettre à jour le taux d'XP par seconde
+  void _updateXpPerSecond() {
+    // Calculer l'XP passive (des senseis)
+    final int passiveXp =
+        _senseis.fold(0, (sum, s) => sum + s.getTotalXpPerSecond());
+
+    // Filtrer les clics des 5 dernières secondes
+    final now = DateTime.now();
+    _clicksInLastSecond = _clicksInLastSecond.where((timestamp) {
+      return now.difference(timestamp).inSeconds < 5;
+    }).toList();
+
+    // Calculer l'XP moyenne des clics récents par seconde
+    final int clickXpPerSecond = _clicksInLastSecond.isEmpty
+        ? 0
+        : (_clicksInLastSecond.length ~/ 5) * _xpPerClick;
+
+    setState(() {
+      _xpPerSecondPassive = passiveXp.toDouble();
+      _xpFromClicks = clickXpPerSecond.toDouble();
+      _totalXpPerSecond = (passiveXp + clickXpPerSecond).toDouble();
+    });
+  }
+
+  // Générer de la puissance automatiquement (à chaque tick du timer)
+  void _genererPuissanceAutomatique() {
+    if (_senseis.isEmpty) return;
+
+    double puissanceGeneree = 0;
+    for (var sensei in _senseis) {
+      puissanceGeneree += sensei.getTotalXpPerSecond();
+    }
+
+    if (puissanceGeneree > 0) {
+      setState(() {
+        _totalXP += puissanceGeneree.round();
+        _updateXP();
+      });
+    }
+  }
+
+  // Méthode appelée lors du clic sur le chakra button
+  void _incrementerPuissance(int bonusXp, double multiplier) {
+    final int xpGain = (_xpPerClick * multiplier).round() + bonusXp;
+    setState(() {
+      _totalXP += xpGain;
+      _updateXP();
+      _clicksInLastSecond.add(DateTime.now());
+    });
+  }
+
+  void _updateXP() {
+    // Mettre à jour le ninja en base de données
+    if (_currentNinja != null) {
+      _currentNinja!.xp = _totalXP;
+      _ninjaService.updateNinja(_currentNinja!);
+    }
+
+    // Recalculer la puissance basée sur les techniques plutôt que sur l'XP
+    _calculatePower();
+  }
+
+  // Méthode pour charger les senseis depuis Firebase
+  Future<void> _loadSenseis() async {
+    try {
+      // D'abord charger tous les senseis disponibles
+      final snapshot =
+          await FirebaseFirestore.instance.collection('senseis').get();
+
+      if (snapshot.docs.isEmpty) {
+        print('Aucun sensei trouvé dans Firebase');
+        return;
+      }
+
+      // Liste des senseis disponibles
+      final availableSenseis =
+          snapshot.docs.map((doc) => Sensei.fromFirestore(doc)).toList();
+
+      setState(() {
+        _senseis = availableSenseis;
+      });
+
+      print('${_senseis.length} senseis chargés depuis Firebase');
+
+      // Ensuite, si un ninja est actif, charger ses senseis pour les niveaux et quantités
+      if (_currentNinja != null) {
+        final ninjaSenseis =
+            await _ninjaService.getNinjaSenseis(_currentNinja!.id);
+
+        if (ninjaSenseis.isNotEmpty) {
+          setState(() {
+            // Mettre à jour les niveaux et quantités des senseis existants
+            for (var ninjaSensei in ninjaSenseis) {
+              final index = _senseis.indexWhere((s) => s.id == ninjaSensei.id);
+              if (index >= 0) {
+                _senseis[index].level = ninjaSensei.level;
+                _senseis[index].quantity = ninjaSensei.quantity;
+              }
+            }
+          });
+
+          print(
+              'Niveaux et quantités des senseis mis à jour: ${ninjaSenseis.length} senseis du ninja');
+        }
+      }
+    } catch (e) {
+      print('Erreur lors du chargement des senseis: $e');
+    }
+  }
+
+  // Méthode pour acheter une technique
+  void _acheterTechnique(Technique technique) {
+    if (_totalXP >= technique.cost) {
+      // Utiliser l'XP au lieu de la puissance
+      // Sauvegarder l'état précédent pour pouvoir annuler en cas d'erreur
+      final previousLevel = technique.niveau;
+
+      // Mettre à jour l'état localement
+      setState(() {
+        _totalXP -= technique.cost; // Déduire de l'XP
+        technique.level =
+            technique.level + 1; // Modifier directement level au lieu de niveau
+      });
+
+      // Recalculer la puissance après l'achat
+      _calculatePower();
+
+      // Sauvegarder l'achat de la technique dans Firebase
+      if (_currentNinja != null) {
+        try {
+          print('==================== ACHAT DE TECHNIQUE ====================');
+          print('ID de la technique à acheter: ${technique.id}');
+          print('Niveau avant achat: ${previousLevel}');
+          print('Nouveau niveau: ${technique.niveau}');
+
+          // Utiliser addTechniqueToNinja qui gère l'ajout ou mise à jour
+          _ninjaService
+              .addTechniqueToNinja(_currentNinja!.id, technique.id)
+              .then((_) {
+            print('✅ Technique sauvegardée en DB: ${technique.name}');
+
+            // Vérifier que la technique apparaît bien comme apprise
+            print('Level final: ${technique.level}');
+            print('Niveau final: ${technique.niveau}');
+
+            // Jouer le son de la technique
+            _audioService.playTechniqueSound(technique.son);
+
+            // Force la mise à jour de l'interface
+            setState(() {});
+
+            // Sauvegarde complète
+            _saveGame();
+          }).catchError((error) {
+            // En cas d'erreur, restaurer l'état précédent
+            setState(() {
+              _totalXP += technique.cost;
+              technique.level = previousLevel;
+            });
+
+            print('⚠️ Erreur lors de l\'achat de la technique: $error');
+          });
+        } catch (e) {
+          // En cas d'erreur, restaurer l'état précédent
+          setState(() {
+            _totalXP += technique.cost;
+            technique.level = previousLevel;
+          });
+
+          print('⚠️ Erreur lors de l\'achat de la technique: $e');
+        }
+      }
+    }
+  }
+
+  // Méthode pour acheter un sensei
+  void _acheterSensei(Sensei sensei) {
+    final cout = sensei.getCurrentCost();
+    // Vérifier que le sensei n'a pas déjà été acheté
+    if (_totalXP >= cout && sensei.quantity == 0) {
+      // Utiliser l'XP au lieu de la puissance
+      setState(() {
+        _totalXP -= cout; // Déduire de l'XP
+        sensei.quantity += 1;
+      });
+
+      // Sauvegarder dans Firebase
+      if (_currentNinja != null) {
+        _ninjaService.addSenseiToNinja(_currentNinja!.id, sensei.id);
+        print(
+            'Sensei ${sensei.name} ajouté au ninja ${_currentNinja!.name} (Quantité: ${sensei.quantity})');
+
+        // Sauvegarde automatique après l'achat d'un sensei
+        _saveGame();
+      }
+    }
+  }
+
+  // Méthode pour améliorer un sensei
+  void _ameliorerSensei(Sensei sensei) {
+    // Coût d'amélioration (par exemple 2x le coût d'achat)
+    final cout = sensei.getCurrentCost() * 2;
+    if (_totalXP >= cout && sensei.quantity > 0) {
+      // Utiliser l'XP au lieu de la puissance
+      setState(() {
+        _totalXP -= cout; // Déduire de l'XP
+        sensei.level += 1;
+      });
+
+      // Sauvegarder dans Firebase
+      if (_currentNinja != null) {
+        _ninjaService.upgradeSensei(_currentNinja!.id, sensei.id);
+        print('Sensei ${sensei.name} amélioré au niveau ${sensei.level}');
+
+        // Sauvegarde automatique après l'amélioration d'un sensei
+        _saveGame();
+      }
+    }
+  }
+
+  // Sauvegarder la partie actuelle
+  Future<void> _saveGame() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user != null && _currentNinja != null) {
+        // Mettre à jour le ninja avec les valeurs actuelles
+        _currentNinja!.xp = _totalXP; // Sauvegarder l'XP totale
+        _currentNinja!.level = _playerLevel;
+        _currentNinja!.power = _power; // Sauvegarder le score de puissance
+
+        // Mettre à jour les autres attributs du ninja selon les besoins
+        _currentNinja!.passiveXp =
+            _senseis.fold(0, (sum, s) => sum + s.getTotalXpPerSecond()).toInt();
+
+        // Mettre à jour la date de dernière connexion
+        _currentNinja!.lastConnected = DateTime.now();
+
+        // Mettre à jour le ninja dans Firebase
+        await _ninjaService.updateNinja(_currentNinja!);
+        print(
+            'Ninja sauvegardé: ${_currentNinja!.name} (${_currentNinja!.xp} XP, niveau ${_currentNinja!.level})');
+
+        // Mettre à jour les techniques et senseis si nécessaire
+        // (code de sauvegarde supplémentaire si besoin)
+      }
+    } catch (e) {
+      print('Erreur lors de la sauvegarde: $e');
+    }
+  }
+
+  // Méthode pour aller au mode histoire
+  void _goToStoryMode() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => StoryScreen(
+          puissance: _power,
+          onMissionComplete:
+              (missionPuissance, missionClones, missionTechniques) {
+            setState(() {
+              _power += missionPuissance;
+
+              // Ajouter les techniques gagnées
+              for (var technique in missionTechniques) {
+                // Vérifier si la technique existe déjà
+                var existingTechnique = _techniques.firstWhere(
+                  (t) => t.id == technique.id,
+                  orElse: () => technique,
+                );
+
+                if (!_techniques.contains(existingTechnique)) {
+                  _techniques.add(existingTechnique);
+                }
+
+                existingTechnique.niveau += 1;
+
+                // Sauvegarder immédiatement la technique
+                if (_currentNinja != null) {
+                  _ninjaService.addTechniqueToNinja(
+                      _currentNinja!.id, existingTechnique.id);
+                }
+              }
+
+              // Sauvegarde complète après la mission
+              _saveGame();
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  // Méthode pour afficher la boîte de dialogue des paramètres
+  void _showSettingsDialog() {
+    showSettingsDialog(
+      context: context,
+      audioService: _audioService,
+    );
+  }
+
+  // Méthode pour retourner au menu principal
+  void _returnToMainMenu() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text(
+            'Quitter la partie',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: const Text('Voulez-vous vraiment quitter le jeu ?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Annuler',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                // S'assurer que lastConnected est mis à jour avant de quitter
+                if (_currentNinja != null) {
+                  _currentNinja!.lastConnected = DateTime.now();
+                }
+
+                // Sauvegarder automatiquement avant de quitter
+                await _saveGame();
+
+                if (context.mounted) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const WelcomeScreen()),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: KaiColors.background,
+              ),
+              child: const Text(
+                'Quitter',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 }

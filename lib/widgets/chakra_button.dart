@@ -1,15 +1,16 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../styles/kai_colors.dart';
 
 class ChakraButton extends StatefulWidget {
   final Function(int bonusXp, double multiplier) onTap;
-  final int puissance; // Ajouter la puissance actuelle en paramètre
+  final int puissance; // Valeur d'XP à afficher
 
   const ChakraButton({
     super.key,
     required this.onTap,
-    required this.puissance, // Rendre ce paramètre obligatoire
+    required this.puissance,
   });
 
   @override
@@ -42,7 +43,8 @@ class _ChakraButtonState extends State<ChakraButton>
   // Gestion du cercle d'énergie
   double _chakraCircleSize = 220;
   double _maxChakraCircleSize = 300;
-  Color _chakraCircleColor = Colors.orange.withOpacity(0.4);
+  Color _chakraCircleColor = KaiColors.accent
+      .withOpacity(0.4); // Changé à la couleur d'accent pour l'XP
 
   // Position du dernier clic
   Offset? _lastTapPosition;
@@ -149,10 +151,10 @@ class _ChakraButtonState extends State<ChakraButton>
         _chakraCircleSize =
             (_chakraCircleSize + 10).clamp(220, _maxChakraCircleSize);
 
-        // Transition de couleur d'orange à bleu basée sur _comboClicks
-        double blueIntensity = (_comboClicks / 10).clamp(0.0, 1.0);
-        _chakraCircleColor = Color.lerp(Colors.orange.withOpacity(0.4),
-            Colors.blue.withOpacity(0.6), blueIntensity)!;
+        // Transition de couleur basée sur _comboClicks
+        double intensityFactor = (_comboClicks / 10).clamp(0.0, 1.0);
+        _chakraCircleColor = Color.lerp(KaiColors.primaryDark.withOpacity(0.4),
+            KaiColors.accent.withOpacity(0.6), intensityFactor)!;
       }
 
       // Annuler toutes les animations précédentes sauf en fin de combo
@@ -286,11 +288,10 @@ class _ChakraButtonState extends State<ChakraButton>
           _chakraCircleSize =
               (_chakraCircleSize - 10).clamp(220.0, _maxChakraCircleSize);
 
-          // Revenir progressivement à la couleur orange
-          double orangeIntensity =
-              1 - (_chakraAnimationStep / 4).clamp(0.0, 1.0);
-          _chakraCircleColor = Color.lerp(Colors.blue.withOpacity(0.6),
-              Colors.orange.withOpacity(0.4), orangeIntensity)!;
+          // Revenir progressivement à la couleur de base
+          double reverseFactor = 1 - (_chakraAnimationStep / 4).clamp(0.0, 1.0);
+          _chakraCircleColor = Color.lerp(KaiColors.accent.withOpacity(0.6),
+              KaiColors.primaryDark.withOpacity(0.4), reverseFactor)!;
         } else {
           // Animation terminée, on arrête le timer
           timer.cancel();
@@ -303,7 +304,7 @@ class _ChakraButtonState extends State<ChakraButton>
 
           // Réinitialiser le cercle
           _chakraCircleSize = 220;
-          _chakraCircleColor = Colors.orange.withOpacity(0.4);
+          _chakraCircleColor = KaiColors.primaryDark.withOpacity(0.4);
         }
       });
     });
@@ -312,179 +313,113 @@ class _ChakraButtonState extends State<ChakraButton>
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (TapDownDetails details) {
-        // Enregistrer la position du clic
-        _lastTapPosition = details.localPosition;
+      onTapDown: (details) {
+        // Stocker la position du clic pour afficher l'animation d'XP
+        setState(() {
+          _lastTapPosition = details.localPosition;
+        });
       },
-      onTap: _handleTap,
-      child: AnimatedBuilder(
-        animation: _scaleAnimation,
-        builder: (context, child) {
-          return Transform.scale(
-            scale: _scaleAnimation.value,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Effet de cercle derrière Naruto
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 100),
-                  width: _chakraCircleSize,
-                  height: _chakraCircleSize,
-                  decoration: BoxDecoration(
-                    color: _chakraCircleColor,
-                    shape: BoxShape.circle,
+      onTap: () {
+        _handleTap();
+      },
+      child: Container(
+        width: 300,
+        height: 300,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.transparent,
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Cercle d'énergie (chakra/XP)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: _chakraCircleSize,
+              height: _chakraCircleSize,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _chakraCircleColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: KaiColors.accent.withOpacity(
+                        0.3), // Changé à la couleur d'accent pour l'XP
+                    blurRadius: 20,
+                    spreadRadius: 5,
                   ),
-                ),
-
-                // Image de Naruto qui change
-                Container(
-                  width: 200,
-                  height: 200,
-                  decoration: const BoxDecoration(
-                    color: Colors.transparent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: _isChakraMode
-                        ? Transform.scale(
-                            scale: 1.5,
-                            child: Image.asset(
-                              _chakraAnimationImages[_chakraAnimationStep],
-                              fit: BoxFit.contain,
-                            ),
-                          )
-                        : Image.asset(
-                            'assets/images/naruto_normal.png',
-                            fit: BoxFit.contain,
-                          ),
-                  ),
-                ),
-
-                // Animations de clic "+n"
-                ..._clickAnimations.map((animation) {
-                  return Positioned(
-                    left: 100 + animation.offsetX,
-                    top: 100 + animation.offsetY,
-                    child: AnimatedOpacity(
-                      opacity: animation.opacity,
-                      duration: const Duration(milliseconds: 50),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        transform: Matrix4.translationValues(
-                            0, -animation.progress * 40, 0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Afficher le nombre de clics en grand
-                            Text(
-                              '${animation.combo}',
-                              style: TextStyle(
-                                fontSize: 36,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                shadows: [
-                                  Shadow(
-                                    color: Colors.blue.shade800,
-                                    blurRadius: 2,
-                                    offset: const Offset(1.5, 1.5),
-                                  ),
-                                  Shadow(
-                                    color: Colors.blue.shade800,
-                                    blurRadius: 2,
-                                    offset: const Offset(-1.5, -1.5),
-                                  ),
-                                  Shadow(
-                                    color: Colors.blue.shade800,
-                                    blurRadius: 2,
-                                    offset: const Offset(1.5, -1.5),
-                                  ),
-                                  Shadow(
-                                    color: Colors.blue.shade800,
-                                    blurRadius: 2,
-                                    offset: const Offset(-1.5, 1.5),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // Montrer le multiplicateur si combo >= 5
-                            if (animation.combo >= 5)
-                              Text(
-                                'x${animation.multiplier.toStringAsFixed(1)}',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.amber.shade300,
-                                  shadows: [
-                                    Shadow(
-                                      color: Colors.blue.shade900,
-                                      blurRadius: 2,
-                                      offset: const Offset(1, 1),
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                            // Si on est en fin d'animation et qu'il y a des bonus, les afficher
-                            if (animation.isEndOfCombo && animation.combo >= 5)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Gain lié au multiplicateur
-                                    Text(
-                                      '+${animation.gainFromMultiplier}',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.green.shade300,
-                                        shadows: [
-                                          Shadow(
-                                            color: Colors.blue.shade900,
-                                            blurRadius: 2,
-                                            offset: const Offset(1, 1),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-
-                                    // Bonus lié au combo si présent
-                                    if (animation.bonusXp > 0)
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const SizedBox(width: 10),
-                                          Text(
-                                            '+${animation.bonusXp}',
-                                            style: TextStyle(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.purple.shade300,
-                                              shadows: [
-                                                Shadow(
-                                                  color: Colors.blue.shade900,
-                                                  blurRadius: 2,
-                                                  offset: const Offset(1, 1),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ],
+                ],
+              ),
             ),
-          );
-        },
+
+            // Image de Naruto avec animation de pulsation
+            ScaleTransition(
+              scale: _scaleAnimation,
+              child: Image.asset(
+                _isChakraMode
+                    ? _chakraAnimationImages[_chakraAnimationStep]
+                    : 'assets/images/naruto_normal.png',
+                width: 200,
+                height: 200,
+              ),
+            ),
+
+            // Texte d'XP actuelle
+            Positioned(
+              bottom: 30,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade700, // Couleur bleue pour l'XP
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 5,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.whatshot, // Icône d'XP
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _formatNumber(widget.puissance),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        const Text(
+                          'XP',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Affichage des animations de clic
+            ..._clickAnimations.map((animation) => animation.buildWidget()),
+          ],
+        ),
       ),
     );
   }
@@ -536,5 +471,135 @@ class ClickAnimation {
         onComplete();
       }
     });
+  }
+
+  Widget buildWidget() {
+    return Positioned(
+      left: 100 + offsetX,
+      top: 100 + offsetY,
+      child: AnimatedOpacity(
+        opacity: opacity,
+        duration: const Duration(milliseconds: 50),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          transform: Matrix4.translationValues(0, -progress * 40, 0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Afficher le nombre de clics en grand
+              Text(
+                '$combo',
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  shadows: [
+                    Shadow(
+                      color: Colors.blue.shade800,
+                      blurRadius: 2,
+                      offset: const Offset(1.5, 1.5),
+                    ),
+                    Shadow(
+                      color: Colors.blue.shade800,
+                      blurRadius: 2,
+                      offset: const Offset(-1.5, -1.5),
+                    ),
+                    Shadow(
+                      color: Colors.blue.shade800,
+                      blurRadius: 2,
+                      offset: const Offset(1.5, -1.5),
+                    ),
+                    Shadow(
+                      color: Colors.blue.shade800,
+                      blurRadius: 2,
+                      offset: const Offset(-1.5, 1.5),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Montrer le multiplicateur si combo >= 5
+              if (combo >= 5)
+                Text(
+                  'x${multiplier.toStringAsFixed(1)}',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.amber.shade300,
+                    shadows: [
+                      Shadow(
+                        color: Colors.blue.shade900,
+                        blurRadius: 2,
+                        offset: const Offset(1, 1),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Si on est en fin d'animation et qu'il y a des bonus, les afficher
+              if (isEndOfCombo && combo >= 5)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Gain lié au multiplicateur
+                      Text(
+                        '+${gainFromMultiplier}',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade300,
+                          shadows: [
+                            Shadow(
+                              color: Colors.blue.shade900,
+                              blurRadius: 2,
+                              offset: const Offset(1, 1),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Bonus lié au combo si présent
+                      if (bonusXp > 0)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(width: 10),
+                            Text(
+                              '+${bonusXp}',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.purple.shade300,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.blue.shade900,
+                                    blurRadius: 2,
+                                    offset: const Offset(1, 1),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _formatNumber(int number) {
+  if (number >= 1000000) {
+    return '${(number / 1000000).toStringAsFixed(2)}M';
+  } else if (number >= 1000) {
+    return '${(number / 1000).toStringAsFixed(2)}K';
+  } else {
+    return number.toString();
   }
 }

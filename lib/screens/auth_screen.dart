@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
+import '../styles/kai_colors.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({Key? key}) : super(key: key);
@@ -123,7 +125,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         : ElevatedButton(
                             onPressed: _submit,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
+                              backgroundColor: KaiColors.primaryDark,
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 50, vertical: 12),
                             ),

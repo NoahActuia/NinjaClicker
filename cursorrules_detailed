@@ -1,0 +1,105 @@
+
+# Projet : Terre du Kai Fracturé
+# Type : Jeu mobile narratif et tactique (Clicker + RPG tour par tour)
+# Univers original, sombre et mystique
+
+context:
+  description: |
+    Terre du Kai Fracturé est un jeu mobile dans un monde ravagé par la chute du Sceau de l'Équilibre.
+    Cette rupture a libéré le Kai, une énergie primordiale instable qui transforme, corrompt, ou amplifie ceux qui la manipulent.
+    
+    Le joueur incarne un Fracturé, un Kaijin sans clan, libre de maîtriser son propre rapport au Kai.
+    Il explore un monde divisé entre cinq grands clans et une zone centrale chaotique appelée Dōshin.
+
+    L'objectif ultime : atteindre le statut mythique de Kairos, un être capable de manipuler toutes les formes de Kai sans perdre son humanité.
+
+  tone: |
+    Mystique, sobre, stratégique. Toujours cohérent avec le lore établi.
+    L’univers est sombre, marqué par des conflits, des mutations et des choix irréversibles.
+    L’énergie Kai est à la fois une source de pouvoir et une malédiction.
+
+  goals:
+    - Fournir à Cursor les règles complètes du gameplay, du lore et des systèmes
+    - Générer des techniques, missions, arbres, interfaces ou descriptions cohérentes
+    - Répondre à des prompts sur les builds, les interactions ou les conditions de combat
+
+  guidelines:
+    - Toujours respecter l’instabilité du Kai : plus on le maîtrise, plus on s’expose à la mutation
+    - Le Kai ne peut pas créer, seulement transformer, renforcer ou corrompre
+    - Les techniques ont des déclencheurs et des conditions précises
+    - L’univers est structuré, mais en ruine : la cohérence doit toujours primer
+
+  world:
+    - Kai : énergie vivante et instable circulant dans les êtres, les lieux, les objets
+    - Fracture : événement cataclysmique ayant libéré le Kai
+    - Sceau : artefact ancien désormais brisé
+    - Kaijin : utilisateur éveillé du Kai
+    - Kairos : forme ultime légendaire
+    - Sensei : maître de Kai, souvent lié à un clan
+    - Fracturé : joueur libre de toute appartenance
+
+  clans:
+    - Shōra (Flux - Ryūkai) : mobilité, esquive, air, dash
+    - Kuretsu (Fracture - Rekkai) : chaos, surcharge, explosions
+    - Sengi (Sceau - Fūkai) : contrôle, rituel, scellés
+    - Yamikai (Dérive - Igyōkai) : corruption, illusions, parasitage
+    - Kaigun (Frappe - Gekikai) : force brute, durcissement, corps à corps
+
+  technique_structure:
+    - Chaque technique a :
+        - Nom (souvent en style japonais ou symbolique)
+        - Affinité (Flux, Fracture, etc.)
+        - Type (Active, Auto, Passif, Coup simple)
+        - Effet principal (attaque, renforcement, altération)
+        - Condition de déclenchement (ex : ennemi projeté, corruption active)
+        - Coût en Kai ou conséquence (surcharge, mutation, fatigue)
+
+  systeme_combat:
+    - Tour par tour
+    - 1 action active par tour
+    - Techniques auto déclenchées si condition remplie
+    - Combo possible entre autos (enchaînement)
+    - Si aucune action ou Kai insuffisant : coup simple déclenché
+    - Chaque joueur possède :
+        - 4 techniques actives
+        - 2–3 auto-techniques
+        - 1 coup simple (modifiable)
+        - Des passifs liés à son affinité / clan / mutation
+
+  arbre_progression:
+    - Niveau I : Techniques naturelles (disponibles à tous)
+    - Niveau II : Techniques d’affinité (débloquées par missions / choix / Sensei)
+    - Niveau III : Techniques avancées, mutantes ou héréditaires
+    - Types de nœuds :
+        - Actifs (techniques à activer)
+        - Auto (déclenchées par condition)
+        - Mutations (effets secondaires permanents)
+        - Passifs (bonus)
+        - Scellés (nécessitent artefacts ou éveils)
+
+  compatibilites:
+    - Flux compatible avec : Fracture, Sceau, Frappe
+    - Fracture : instable avec Flux, Frappe / incompatible Sceau
+    - Sceau : stable avec Flux et Frappe / incompatible Dérive
+    - Dérive : presque incompatible avec tout sauf elle-même
+    - Frappe : stable avec Flux et Sceau
+
+  exemple_technique:
+    - Nom : "Entaille du Vent"
+      Affinité : Flux
+      Type : Active
+      Effet : Frappe multiple rapide + repousse l’ennemi
+      Condition auto : Si l’ennemi est repoussé, déclenche "Tourbillon"
+      Coût : 2 Kai
+    - Nom : "Marque Parasite"
+      Affinité : Dérive
+      Type : Auto
+      Effet : Si l’ennemi est corrompu, vole sa prochaine technique
+      Déclencheur : état "corrompu"
+
+  interface:
+    - HUD portrait
+    - Jauge de Kai
+    - Slots de techniques (4 actives + 2 auto + passifs visibles)
+    - Icônes de conditions : Projeter, Stun, Marqué, Corrompu, Combo 3+
+

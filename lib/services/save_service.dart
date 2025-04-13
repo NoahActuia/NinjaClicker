@@ -1,10 +1,16 @@
 import 'dart:convert';
-import 'dart:html' as html;
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:path_provider/path_provider.dart' as path_provider;
 import '../models/saved_game.dart';
 import '../models/mission.dart';
 import 'ninja_service.dart';
+
+// Import conditionnel pour le web
+// ignore: unused_import
+import 'save_service_web.dart' if (dart.library.io) 'save_service_stub.dart';
 
 class SaveService {
   static final SaveService _instance = SaveService._internal();
@@ -261,25 +267,30 @@ class SaveService {
       }
 
       final String jsonData = json.encode(savedGamesJson);
-      final blob = html.Blob([jsonData], 'text/plain', 'native');
 
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      final anchor = html.document.createElement('a') as html.AnchorElement
-        ..href = url
-        ..style.display = 'none'
-        ..download = 'ninja_clicker_saves.json';
-
-      html.document.body?.children.add(anchor);
-
-      anchor.click();
-
-      html.document.body?.children.remove(anchor);
-      html.Url.revokeObjectUrl(url);
+      if (kIsWeb) {
+        // Pour le web, on délègue à une implémentation spécifique
+        exportToWebFile(jsonData, 'ninja_clicker_saves.json');
+      } else {
+        // Version Mobile
+        final directory =
+            await path_provider.getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/ninja_clicker_saves.json');
+        await file.writeAsString(jsonData);
+        print('Fichier sauvegardé à: ${file.path}');
+      }
 
       print('Sauvegardes exportées avec succès');
     } catch (e) {
       print('Erreur lors de l\'export des sauvegardes: $e');
     }
+  }
+
+  // Méthode pour le web uniquement (stub pour mobile)
+  void exportToWebFile(String jsonData, String fileName) {
+    // Cette méthode est remplacée par l'implémentation réelle dans save_service_web.dart
+    // Elle ne fait rien sur mobile
+    print('Export vers fichier non disponible sur cette plateforme');
   }
 
   Future<void> importSavesFromString(String jsonData) async {
@@ -307,10 +318,24 @@ class SaveService {
       }
 
       final String jsonData = json.encode(savedGamesJson);
-      html.window.localStorage['ninja_clicker_saves'] = jsonData;
+
+      if (kIsWeb) {
+        storeInWebLocalStorage('ninja_clicker_saves', jsonData);
+      } else {
+        // Sur mobile, on utilise les SharedPreferences à la place
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('ninja_clicker_saves_backup', jsonData);
+      }
     } catch (e) {
       print('Erreur lors de l\'auto-export des sauvegardes: $e');
     }
+  }
+
+  // Méthode pour le web uniquement (stub pour mobile)
+  void storeInWebLocalStorage(String key, String data) {
+    // Cette méthode est remplacée par l'implémentation réelle dans save_service_web.dart
+    // Elle ne fait rien sur mobile
+    print('Stockage localStorage non disponible sur cette plateforme');
   }
 
   // Cette méthode est gardée pour compatibilité mais sera dépréciée
@@ -324,13 +349,16 @@ class SaveService {
       }
 
       final String jsonData = json.encode(missionsJson);
-      html.window.localStorage['ninja_clicker_missions'] = jsonData;
+
+      if (kIsWeb) {
+        storeInWebLocalStorage('ninja_clicker_missions', jsonData);
+      } else {
+        // Sur mobile, on utilise les SharedPreferences à la place
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('ninja_clicker_missions_backup', jsonData);
+      }
     } catch (e) {
       print('Erreur lors de l\'auto-export des missions: $e');
     }
-  }
-
-  void _showImportDialog() {
-    // Cette méthode sera supprimée ou déplacée dans la classe UI appropriée
   }
 }

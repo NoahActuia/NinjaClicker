@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/technique.dart';
+import '../styles/kai_colors.dart';
 
 class TechniqueList extends StatelessWidget {
   final List<Technique> techniques;
@@ -32,12 +33,12 @@ class TechniqueList extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Text(
+          Text(
             'Techniques Ninja',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Colors.deepOrange,
+              color: KaiColors.primaryDark,
             ),
           ),
           const SizedBox(height: 10),
@@ -111,7 +112,7 @@ class TechniqueCard extends StatelessWidget {
               ? () => onAcheterTechnique(technique)
               : null,
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.orange[600],
+            backgroundColor: KaiColors.accent,
             foregroundColor: Colors.white,
             disabledBackgroundColor: Colors.grey[400],
           ),

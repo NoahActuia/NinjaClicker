@@ -7,6 +7,7 @@ class AudioService {
   final AudioPlayer ambiancePlayer = AudioPlayer();
   final AudioPlayer effectPlayer = AudioPlayer();
   final AudioPlayer techniquePlayer = AudioPlayer();
+  final AudioPlayer effectsPlayer = AudioPlayer();
 
   bool isAmbiancePlaying = false;
   bool isEffectsSoundPlaying = false;
@@ -139,8 +140,30 @@ class AudioService {
     ambiancePlayer.dispose();
     effectPlayer.dispose();
     techniquePlayer.dispose();
+    effectsPlayer.dispose();
 
     isAmbiancePlaying = false;
     isEffectsSoundPlaying = false;
+  }
+
+  // Jouer un son spécifique
+  Future<void> playSound(String soundName) async {
+    try {
+      // Si le chemin contient déjà 'assets/sounds', ne pas l'ajouter
+      String soundPath;
+      if (soundName.startsWith('assets/sounds/')) {
+        soundPath = soundName;
+      } else if (soundName.startsWith('sounds/')) {
+        soundPath = 'assets/$soundName';
+      } else {
+        soundPath = 'assets/sounds/$soundName';
+      }
+
+      await effectsPlayer
+          .play(AssetSource(soundPath.replaceAll('assets/', '')));
+      print('Lecture du son: $soundPath');
+    } catch (e) {
+      print('Erreur lors de la lecture du son $soundName: $e');
+    }
   }
 }

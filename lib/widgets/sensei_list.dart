@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/sensei.dart';
+import '../styles/kai_colors.dart';
 
 class SenseiList extends StatelessWidget {
   final List<Sensei> senseis;
@@ -34,12 +35,12 @@ class SenseiList extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Text(
+          Text(
             'Senseis',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Colors.blue,
+              color: KaiColors.accent,
             ),
           ),
           const SizedBox(height: 10),
@@ -169,7 +170,7 @@ class SenseiCard extends StatelessWidget {
                     icon: const Icon(Icons.upgrade),
                     label: Text('Améliorer (${upgradeCost} XP)'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.amber,
+                      backgroundColor: KaiColors.primaryDark,
                       foregroundColor: Colors.white,
                     ),
                   ),

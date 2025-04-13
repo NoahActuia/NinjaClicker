@@ -13,6 +13,7 @@ class Ninja {
   int defense;
   int xpPerClick;
   int passiveXp;
+  int power;
   Map<String, String> appearance;
   DateTime lastConnected;
 
@@ -22,6 +23,13 @@ class Ninja {
   int matchesPlayed;
   int wins;
   int losses;
+
+  // Données des techniques et senseis
+  List<String> techniques = [];
+  Map<String, int> techniqueLevels = {};
+  List<String> senseis = [];
+  Map<String, int> senseiLevels = {};
+  Map<String, int> senseiQuantities = {};
 
   Ninja({
     required this.id,
@@ -36,6 +44,7 @@ class Ninja {
     this.defense = 10,
     this.xpPerClick = 1,
     this.passiveXp = 0,
+    this.power = 0,
     this.appearance = const {
       'skin': 'default',
       'headband': 'default',
@@ -65,6 +74,7 @@ class Ninja {
       defense: data['defense'] ?? 10,
       xpPerClick: data['xpPerClick'] ?? 1,
       passiveXp: data['passiveXp'] ?? 0,
+      power: data['power'] ?? 0,
       appearance: Map<String, String>.from(data['appearance'] ??
           {'skin': 'default', 'headband': 'default', 'weapon': 'default'}),
       rank: data['rank'] ?? 'beginner',
@@ -75,7 +85,13 @@ class Ninja {
       lastConnected: data['lastConnected'] != null
           ? DateTime.fromMillisecondsSinceEpoch(data['lastConnected'])
           : DateTime.now(),
-    );
+    )
+      ..techniques = List<String>.from(data['techniques'] ?? [])
+      ..techniqueLevels = Map<String, int>.from(data['techniqueLevels'] ?? {})
+      ..senseis = List<String>.from(data['senseis'] ?? [])
+      ..senseiLevels = Map<String, int>.from(data['senseiLevels'] ?? {})
+      ..senseiQuantities =
+          Map<String, int>.from(data['senseiQuantities'] ?? {});
   }
 
   // Vers Firestore
@@ -92,6 +108,7 @@ class Ninja {
       'defense': defense,
       'xpPerClick': xpPerClick,
       'passiveXp': passiveXp,
+      'power': power,
       'appearance': appearance,
       'rank': rank,
       'eloPoints': eloPoints,
@@ -99,12 +116,17 @@ class Ninja {
       'wins': wins,
       'losses': losses,
       'lastConnected': lastConnected.millisecondsSinceEpoch,
+      'techniques': techniques,
+      'techniqueLevels': techniqueLevels,
+      'senseis': senseis,
+      'senseiLevels': senseiLevels,
+      'senseiQuantities': senseiQuantities,
     };
   }
 
   // Calculer le score total du ninja (pour le classement)
   int getTotalScore() {
-    return level * 1000 + xp;
+    return power > 0 ? power : level * 1000 + xp;
   }
 
   // Obtenir la classe du ninja en fonction de son niveau

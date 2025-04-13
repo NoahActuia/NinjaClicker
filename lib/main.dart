@@ -6,33 +6,32 @@ import 'screens/firebase_test_screen.dart';
 import 'screens/auth_screen.dart';
 import 'screens/auth_wrapper.dart';
 import 'services/database_initializer.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'styles/kai_colors.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialiser Firebase avec gestion d'erreur
-  bool firebaseInitialized = false;
-  String firebaseError = '';
-
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    firebaseInitialized = true;
-    print('Firebase initialisé avec succès');
 
-    // Initialiser la base de données avec les techniques et senseis
-    final databaseInitializer = DatabaseInitializer();
-    await databaseInitializer.initializeDatabase();
-    print('Base de données initialisée avec succès');
+    // Configure Crashlytics uniquement pour les plateformes mobiles
+    if (!kIsWeb) {
+      FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
+      FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterError;
+    }
   } catch (e) {
-    firebaseError = e.toString();
-    print('Erreur lors de l\'initialisation de Firebase: $e');
+    print("Erreur lors de l'initialisation: $e");
   }
-
-  runApp(MyApp(
-    firebaseInitialized: firebaseInitialized,
-    firebaseError: firebaseError,
+  final dbInitializer = DatabaseInitializer();
+  await dbInitializer.initializeDatabase();
+  runApp(const MyApp(
+    firebaseInitialized: true,
+    firebaseError: '',
   ));
 }
 
@@ -49,18 +48,30 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'logo.png',
+      title: 'Ninja Clicker',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        // Thème partagé pour Android et iOS
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.orange,
-          secondary: Colors.blue,
+          seedColor: KaiColors.primaryDark,
+          secondary: KaiColors.accent,
+          brightness: Brightness.light,
         ),
-        textTheme: const TextTheme(
+        primaryColor: KaiColors.primaryDark,
+        primarySwatch: Colors.indigo,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+        useMaterial3: true,
+        textTheme: TextTheme(
           headlineMedium: TextStyle(
             fontSize: 48,
             fontWeight: FontWeight.bold,
-            color: Colors.orange,
+            color: KaiColors.accent,
           ),
+        ),
+        // Surcharge iOS spécifique
+        cupertinoOverrideTheme: CupertinoThemeData(
+          primaryColor: KaiColors.primaryDark,
+          brightness: Brightness.light,
         ),
       ),
       initialRoute: '/',

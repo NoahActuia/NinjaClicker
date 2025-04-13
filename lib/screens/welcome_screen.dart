@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
-import 'dart:html' as html;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
+// Import conditionnel pour le web
+// ignore: unused_import
+import 'welcome_screen_web.dart'
+    if (dart.library.io) 'welcome_screen_stub.dart';
 import '../models/saved_game.dart';
 import '../services/save_service.dart';
 import 'game_screen.dart';
@@ -9,6 +13,7 @@ import 'firebase_test_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/ninja_service.dart';
 import '../models/ninja.dart';
+import 'intro_video_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -72,7 +77,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           title: const Text(
             'Nouvelle Partie',
             style: TextStyle(
-              color: Colors.orange,
+              color: KaiColors.background,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -99,7 +104,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
+                backgroundColor: KaiColors.background,
               ),
               child: const Text(
                 'Commencer',
@@ -123,14 +128,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           name: playerName,
         );
 
-        // Démarrer le jeu avec ce ninja
+        // Démarrer la vidéo d'introduction puis le jeu avec ce ninja
         if (mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (context) => GameScreen(
+              builder: (context) => IntroVideoScreen(
                 playerName: playerName,
-                savedGame: null,
               ),
             ),
           );
@@ -189,7 +193,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             ElevatedButton(
               onPressed: _showNewGameDialog,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
+                backgroundColor: KaiColors.background,
               ),
               child: const Text('Créer un ninja'),
             ),
@@ -207,7 +211,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
           child: ListTile(
             leading: const CircleAvatar(
-              backgroundColor: Colors.orange,
+              backgroundColor: KaiColors.background,
               child: Icon(Icons.person, color: Colors.white),
             ),
             title: Text(
@@ -310,98 +314,285 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Titre du jeu
-                Image.asset(
-                  'assets/images/logo.png',
-                  height: 100,
-                  fit: BoxFit.contain,
-                ),
-                const SizedBox(height: 40),
-
-                // Liste des ninjas
+                // Logo et titre
                 Container(
-                  height: 300,
-                  width: double.infinity,
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
+                    color: Colors.white.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(15),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 10,
+                        spreadRadius: 2,
+                      ),
+                    ],
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Image.asset(
+                        'assets/images/logo.png',
+                        height: 130,
+                        width: 130,
+                      ),
+                      const SizedBox(height: 20),
                       const Text(
-                        'Vos Ninjas',
+                        'Terre du Kai Fracturé',
                         style: TextStyle(
-                          fontSize: 22,
+                          fontSize: 28,
                           fontWeight: FontWeight.bold,
-                          color: Colors.orange,
+                          color: Colors.white,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black,
+                              blurRadius: 5,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      Expanded(
-                        child: _buildNinjasList(),
+                      Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              KaiColors.background.withOpacity(0.9),
+                              KaiColors.background.withOpacity(0.7),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          'Un monde fracturé, un destin à forger',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-
-                const SizedBox(height: 20),
-
-                // Bouton pour créer un nouveau ninja
-                if (_playerNinjas.isNotEmpty)
-                  ElevatedButton.icon(
-                    onPressed: _showNewGameDialog,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Nouveau Ninja'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 30, vertical: 15),
-                    ),
-                  ),
-
                 const SizedBox(height: 40),
 
-                // Boutons du bas
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton(
+                // Affichage des ninjas existants
+                if (_playerNinjas.isNotEmpty) ...[
+                  Container(
+                    width: 300,
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 10,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Personnages disponibles',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: KaiColors.kaiNeutral,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ...List.generate(
+                          _playerNinjas.length,
+                          (index) => _buildNinjaCard(_playerNinjas[index]),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+
+                // Bouton de création
+                ElevatedButton(
+                  onPressed: _showNewGameDialog,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: KaiColors.background,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 30, vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.add, color: Colors.white),
+                      SizedBox(width: 10),
+                      Text(
+                        'Créer un nouveau personnage',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 15),
+
+                // Bouton de classement
+                TextButton.icon(
+                  onPressed: _openRankingScreen,
+                  icon: Icon(
+                    Icons.emoji_events,
+                    color: KaiColors.kaiNeutral,
+                  ),
+                  label: Text(
+                    'Classement mondial',
+                    style: TextStyle(
+                      color: KaiColors.kaiNeutral,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+
+                // Bouton de déconnexion
+                if (_playerNinjas.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 15),
+                    child: TextButton(
                       onPressed: () async {
                         await FirebaseAuth.instance.signOut();
                         if (mounted) {
                           Navigator.pushReplacementNamed(context, '/auth');
                         }
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
+                      child: const Text(
+                        'Se déconnecter',
+                        style: TextStyle(
+                          color: Colors.white70,
+                        ),
                       ),
-                      child: const Text('Déconnexion'),
                     ),
-                    const SizedBox(width: 20),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const FirebaseTestScreen(),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey,
-                      ),
-                      child: const Text('Tester Firebase'),
-                    ),
-                  ],
-                ),
+                  ),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  // Carte pour afficher un ninja
+  Widget _buildNinjaCard(Ninja ninja) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            KaiColors.background.withOpacity(0.2),
+            KaiColors.background.withOpacity(0.4),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: KaiColors.background,
+          child: const Icon(
+            Icons.person,
+            color: Colors.white,
+          ),
+        ),
+        title: Text(
+          ninja.name,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: Text(
+          'Niveau ${ninja.level} • XP: ${ninja.xp} • Puissance: ${ninja.power}',
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+          ),
+        ),
+        trailing: const Icon(
+          Icons.chevron_right,
+          color: Colors.white70,
+        ),
+        onTap: () => _loadNinjaAndStartGame(ninja),
+      ),
+    );
+  }
+
+  // Affichage de la boîte de dialogue de création de ninja
+  void _showCreateNinjaDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            'Créer un nouveau personnage',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: KaiColors.background,
+            ),
+          ),
+          content: TextField(
+            controller: _nameController,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              labelText: 'Nom du personnage',
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: KaiColors.background,
+                  width: 2.0,
+                ),
+              ),
+            ),
+            maxLength: 20,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _nameController.clear();
+              },
+              child: const Text(
+                'Annuler',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                String name = _nameController.text.trim();
+                if (name.isNotEmpty) {
+                  Navigator.pop(context);
+                  _createNinjaAndStartGame(name);
+                  _nameController.clear();
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: KaiColors.background,
+              ),
+              child: const Text(
+                'Créer',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _openRankingScreen() {
+    // Implementation of _openRankingScreen method
   }
 }

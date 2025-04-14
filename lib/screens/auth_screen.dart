@@ -123,7 +123,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     _isLoading
                         ? const CircularProgressIndicator()
                         : ElevatedButton(
-                            onPressed: _submit,
+                            onPressed: _handleSubmit,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: KaiColors.primaryDark,
                               padding: const EdgeInsets.symmetric(
@@ -161,8 +161,8 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Future<void> _submit() async {
-    if (_formKey.currentState?.validate() ?? false) {
+  Future<void> _handleSubmit() async {
+    if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
         _errorMessage = '';
@@ -178,7 +178,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
           if (user != null && mounted) {
             Navigator.pushReplacementNamed(context, '/welcome');
-          } else {
+          } else if (mounted) {
             setState(() {
               _errorMessage = 'Erreur de connexion';
             });
@@ -193,16 +193,18 @@ class _AuthScreenState extends State<AuthScreen> {
 
           if (user != null && mounted) {
             Navigator.pushReplacementNamed(context, '/welcome');
-          } else {
+          } else if (mounted) {
             setState(() {
               _errorMessage = 'Erreur d\'inscription';
             });
           }
         }
       } catch (e) {
-        setState(() {
-          _errorMessage = e.toString();
-        });
+        if (mounted) {
+          setState(() {
+            _errorMessage = e.toString();
+          });
+        }
       } finally {
         if (mounted) {
           setState(() {

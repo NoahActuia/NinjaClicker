@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'styles/kai_colors.dart';
+import 'services/resonance_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +30,11 @@ void main() async {
   }
   final dbInitializer = DatabaseInitializer();
   await dbInitializer.initializeDatabase();
+
+  // Initialiser les résonances par défaut
+  final resonanceService = ResonanceService();
+  await resonanceService.initDefaultResonances();
+
   runApp(const MyApp(
     firebaseInitialized: true,
     firebaseError: '',

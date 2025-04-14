@@ -12,7 +12,7 @@ class Ninja {
   int speed;
   int defense;
   int xpPerClick;
-  int passiveXp;
+  double passiveXp;
   int power;
   Map<String, String> appearance;
   DateTime lastConnected;
@@ -61,6 +61,19 @@ class Ninja {
   // Depuis Firestore
   factory Ninja.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+
+    // Gérer spécifiquement le cas où passiveXp est un double
+    var passiveXpValue = data['passiveXp'];
+    double passiveXpInt;
+
+    if (passiveXpValue is double) {
+      // Convertir la valeur double en int
+      passiveXpInt = passiveXpValue;
+    } else {
+      // Utiliser la valeur telle quelle (si c'est un int) ou 0 par défaut
+      passiveXpInt = (passiveXpValue as double?) ?? 0;
+    }
+
     return Ninja(
       id: doc.id,
       userId: data['userId'] ?? '',
@@ -73,7 +86,7 @@ class Ninja {
       speed: data['speed'] ?? 10,
       defense: data['defense'] ?? 10,
       xpPerClick: data['xpPerClick'] ?? 1,
-      passiveXp: data['passiveXp'] ?? 0,
+      passiveXp: passiveXpInt,
       power: data['power'] ?? 0,
       appearance: Map<String, String>.from(data['appearance'] ??
           {'skin': 'default', 'headband': 'default', 'weapon': 'default'}),

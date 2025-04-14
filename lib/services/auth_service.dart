@@ -71,21 +71,33 @@ class AuthService {
       );
 
       if (userCredential.user != null) {
-        // Mettre à jour la dernière connexion
-        await _firestore
-            .collection('users')
-            .doc(userCredential.user!.uid)
-            .update({'lastLogin': Timestamp.now()});
-
-        // Récupérer les données utilisateur
-        final docSnapshot = await _firestore
-            .collection('users')
-            .doc(userCredential.user!.uid)
-            .get();
+        // Vérifier d'abord si le document existe
+        final docRef =
+            _firestore.collection('users').doc(userCredential.user!.uid);
+        final docSnapshot = await docRef.get();
 
         if (docSnapshot.exists) {
+          // Mettre à jour la dernière connexion si le document existe
+          await docRef.update({'lastLogin': Timestamp.now()});
+
           // Créer et retourner l'utilisateur
           return app_model.User.fromFirestore(docSnapshot);
+        } else {
+          // Le document n'existe pas, créer un nouvel utilisateur
+          print(
+              'Document utilisateur non trouvé, création d\'un nouvel utilisateur');
+          final newUser = app_model.User(
+            id: userCredential.user!.uid,
+            username: email
+                .split('@')[0], // Nom d'utilisateur par défaut basé sur l'email
+            email: email,
+            createdAt: DateTime.now(),
+            lastLogin: DateTime.now(),
+          );
+
+          // Sauvegarder le nouvel utilisateur
+          await docRef.set(newUser.toFirestore());
+          return newUser;
         }
       }
     } catch (e) {

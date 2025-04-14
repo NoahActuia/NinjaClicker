@@ -1,0 +1,33 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Projet : Terre du Kai Fracturé (anciennement NinjaClicker)
+
+# Type : Jeu mobile – RPG tactique + clicker narratif
+
+# Univers original, inspiré de Naruto mais 100% indépendant
+
+context:
+description: |
+Terre du Kai Fracturé est un jeu mobile se déroulant dans un monde post-apocalyptique où une énergie instable, le Kai, a tout transformé.
+Le joueur incarne un "Fracturé", un guerrier sans clan, libre de forger son propre chemin parmi les ruines d’un monde brisé.
+
+    Le monde est structuré autour de 5 grands clans, chacun lié à une affinité du Kai (Flux, Fracture, Sceau, Dérive, Frappe).
+    Le système de combat est au tour par tour, basé sur des choix tactiques, des déclencheurs de conditions, et une énergie instable à maîtriser.
+
+    Le jeu mêle des éléments de progression (arbre évolutif, héritage, mutations), de narration dynamique (quêtes, alignement, réputation) et de PVP compétitif (tournois, Elo).
+
+    Objectif : Créer un jeu riche, profond et stylisé, avec un univers original mêlant stratégie, lore mystique et personnalisation poussée.
+
+tone: |
+Utiliser un ton narratif, mystique, stratégique, sans tomber dans la sur-explication.
+Penser comme un assistant créatif dans un projet de fantasy sombre.
+Mettre l'accent sur la cohérence de l’univers, la profondeur des systèmes, et la clarté des interactions.
+
+goals: - Structurer un univers narratif complet (clans, factions, Kairos, etc.) - Créer des systèmes de gameplay stratégiques (combat, Kai, réputation) - Développer des interfaces UI/UX adaptées au mobile - Générer des techniques, du lore, des dialogues ou des cartes - Préparer des présentations, pitchs ou assets visuels pour développement ou communication
+
+guidelines: - Toujours respecter la logique du Kai : énergie instable, source de pouvoir et de chaos - Ne jamais copier Naruto – s’en inspirer dans la philosophie, pas dans la forme - Privilégier la tension entre liberté du joueur et héritage mystique - Proposer des idées compatibles avec un jeu mobile (performance, clarté, design responsive)
+
+examples: - Si on te demande une technique de Kai : proposer un nom, une affinité, un effet principal, un déclencheur - Si on te demande un arbre : proposer une structure à 3 niveaux, avec noeuds actifs/passifs/mutations - Si on te demande une interface : décrire la hiérarchie visuelle et les éléments (jauges, skills, aura, etc.)

@@ -135,49 +135,49 @@ class _IntroVideoScreenState extends State<IntroVideoScreen>
   late final List<Map<String, dynamic>> _imageEffects = [
     {
       'transition': 'fade', // fondu
-      'scale': {'start': 1.0, 'end': 1.1}, // légère zoom avant
+      'scale': {'start': 1.0, 'end': 1.08}, // zoom avant léger et progressif
       'alignment': Alignment.center,
       'color': KaiColors.kaiRitual.withOpacity(0.1), // Teinte de Sceau
     },
     {
-      'transition': 'slide_right',
-      'scale': {'start': 1.05, 'end': 1.0}, // léger zoom arrière
-      'alignment': Alignment.centerLeft,
+      'transition': 'fade',
+      'scale': {'start': 1.0, 'end': 1.07}, // zoom avant léger et progressif
+      'alignment': Alignment.center,
       'color': KaiColors.kaiFlux.withOpacity(0.15), // Teinte de Flux
     },
     {
       'transition': 'fade',
-      'scale': {'start': 1.0, 'end': 1.2}, // zoom avant plus prononcé
-      'alignment': Alignment.topCenter,
+      'scale': {'start': 1.0, 'end': 1.09}, // zoom avant léger et progressif
+      'alignment': Alignment.center,
       'color': KaiColors.kaiCorrupted.withOpacity(0.2), // Teinte de Dérive
     },
     {
-      'transition': 'slide_left',
-      'scale': {'start': 1.0, 'end': 1.1},
-      'alignment': Alignment.bottomCenter,
+      'transition': 'fade',
+      'scale': {'start': 1.0, 'end': 1.08}, // zoom avant léger et progressif
+      'alignment': Alignment.center,
       'color': KaiColors.kaiFractured.withOpacity(0.15), // Teinte de Fracture
     },
     {
       'transition': 'fade',
-      'scale': {'start': 1.15, 'end': 1.0}, // zoom arrière
+      'scale': {'start': 1.0, 'end': 1.07}, // zoom avant léger et progressif
       'alignment': Alignment.center,
       'color': KaiColors.kaiStrike.withOpacity(0.2), // Teinte de Frappe
     },
     {
-      'transition': 'slide_up',
-      'scale': {'start': 1.0, 'end': 1.15},
-      'alignment': Alignment.centerRight,
+      'transition': 'fade',
+      'scale': {'start': 1.0, 'end': 1.08}, // zoom avant léger et progressif
+      'alignment': Alignment.center,
       'color': KaiColors.kaiNeutral.withOpacity(0.1), // Teinte de Kai neutre
     },
     {
       'transition': 'fade',
-      'scale': {'start': 1.1, 'end': 1.05},
-      'alignment': Alignment.bottomRight,
+      'scale': {'start': 1.0, 'end': 1.09}, // zoom avant léger et progressif
+      'alignment': Alignment.center,
       'color': KaiColors.kaiCorrupted.withOpacity(0.25), // Teinte de Dérive
     },
     {
       'transition': 'fade',
-      'scale': {'start': 1.0, 'end': 1.2},
+      'scale': {'start': 1.0, 'end': 1.08}, // zoom avant léger et progressif
       'alignment': Alignment.center,
       'color': KaiColors.kaiNeutral.withOpacity(0.3), // Teinte de Kai neutre
     },
@@ -193,10 +193,6 @@ class _IntroVideoScreenState extends State<IntroVideoScreen>
   late Animation<double> _opacityAnimation;
   late AnimationController _positionController;
   late Animation<Offset> _positionAnimation;
-
-  // Animation pour l'effet pulsation du Kai
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
 
   // Animation pour les sous-titres
   late AnimationController _subtitleOpacityController;
@@ -242,23 +238,6 @@ class _IntroVideoScreenState extends State<IntroVideoScreen>
       parent: _subtitleOpacityController,
       curve: Curves.easeIn,
     ));
-
-    // Contrôleur pour l'effet de pulsation du Kai
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    );
-
-    _pulseAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.05,
-    ).animate(CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    ));
-
-    // Répéter l'animation de pulsation
-    _pulseController.repeat(reverse: true);
 
     // Démarrer l'effet glitch périodique
     _startGlitchEffect();
@@ -324,7 +303,8 @@ class _IntroVideoScreenState extends State<IntroVideoScreen>
       end: effect['scale']['end'],
     ).animate(CurvedAnimation(
       parent: _scaleController,
-      curve: Curves.easeInOut,
+      curve:
+          Curves.linear, // Utiliser une courbe linéaire pour un zoom constant
     ));
 
     // Animation d'opacité (fondu)
@@ -337,24 +317,8 @@ class _IntroVideoScreenState extends State<IntroVideoScreen>
     ));
 
     // Animation de position (slide)
-    Offset beginOffset;
-
-    switch (effect['transition']) {
-      case 'slide_left':
-        beginOffset = const Offset(1.0, 0.0); // droite vers gauche
-        break;
-      case 'slide_right':
-        beginOffset = const Offset(-1.0, 0.0); // gauche vers droite
-        break;
-      case 'slide_up':
-        beginOffset = const Offset(0.0, 1.0); // bas vers haut
-        break;
-      case 'slide_down':
-        beginOffset = const Offset(0.0, -1.0); // haut vers bas
-        break;
-      default:
-        beginOffset = const Offset(0.0, 0.0); // pas de slide
-    }
+    Offset beginOffset = const Offset(
+        0.0, 0.0); // Toujours pas de slide avec la transition 'fade'
 
     _positionAnimation = Tween<Offset>(
       begin: beginOffset,
@@ -370,12 +334,7 @@ class _IntroVideoScreenState extends State<IntroVideoScreen>
     _positionController.reset();
 
     // Démarrer les animations
-    if (effect['transition'] == 'fade') {
-      _positionController.value = 1.0; // Pas de mouvement pour le fondu
-    } else {
-      _positionController.forward();
-    }
-
+    _positionController.value = 1.0; // Pas de mouvement pour tous les cas
     _opacityController.forward();
     _scaleController
         .forward(); // Cette animation durera pendant toute la durée d'affichage
@@ -476,57 +435,41 @@ class _IntroVideoScreenState extends State<IntroVideoScreen>
     if (mounted && !_isTransitioning) {
       _isTransitioning = true;
 
-      // Arrêter l'audio de l'introduction
-      _audioService.stopAmbiance();
-
-      // Annuler les timers
+      // Annuler tous les timers et animations en cours
+      _imageTimer?.cancel();
       _subtitleTimer?.cancel();
       _glitchTimer?.cancel();
 
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => GameScreen(
+      // Arrêter et libérer toutes les animations
+      _scaleController.reset();
+      _opacityController.reset();
+      _positionController.reset();
+      _subtitleOpacityController.reset();
+
+      // Bien s'assurer que l'audio est complètement arrêté
+      try {
+        _audioService.stopAmbiance();
+        _audioService.stopChakraSound();
+      } catch (e) {
+        print('Erreur lors de l\'arrêt des sons: $e');
+      }
+
+      // Transition directe sans délai
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (context) => GameScreen(
             playerName: widget.playerName,
             savedGame: null,
           ),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            // Effet de transition avec éclat de Kai
-            return FadeTransition(
-              opacity: animation,
-              child: Stack(
-                children: [
-                  child,
-                  // Éclat de Kai qui disparaît
-                  FadeTransition(
-                    opacity: Tween<double>(begin: 0.8, end: 0.0)
-                        .animate(CurvedAnimation(
-                      parent: animation,
-                      curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
-                    )),
-                    child: Container(
-                      color: KaiColors.kaiNeutral.withOpacity(0.3),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-          transitionDuration: const Duration(milliseconds: 1500),
         ),
+        (route) => false, // Supprime toutes les routes précédentes
       );
     }
   }
 
   void _skipIntro() {
-    if (_imageTimer != null) {
-      _imageTimer!.cancel();
-    }
-    if (_subtitleTimer != null) {
-      _subtitleTimer!.cancel();
-    }
-    if (_glitchTimer != null) {
-      _glitchTimer!.cancel();
-    }
+    // Utiliser la même méthode que _goToGameScreen pour éviter les problèmes
     _goToGameScreen();
   }
 
@@ -539,7 +482,6 @@ class _IntroVideoScreenState extends State<IntroVideoScreen>
     _opacityController.dispose();
     _positionController.dispose();
     _subtitleOpacityController.dispose();
-    _pulseController.dispose();
     _audioService.dispose();
     super.dispose();
   }
@@ -559,7 +501,6 @@ class _IntroVideoScreenState extends State<IntroVideoScreen>
                   _scaleController,
                   _opacityController,
                   _positionController,
-                  _pulseController,
                 ]),
                 key: ValueKey<int>(_currentImageIndex),
                 builder: (context, child) {
@@ -568,9 +509,8 @@ class _IntroVideoScreenState extends State<IntroVideoScreen>
                     child: SlideTransition(
                       position: _positionAnimation,
                       child: Transform.scale(
-                        scale: _scaleAnimation.value *
-                            (_showGlitch ? 1.03 : 1.0) *
-                            _pulseAnimation.value,
+                        scale:
+                            _scaleAnimation.value * (_showGlitch ? 1.03 : 1.0),
                         alignment: _imageEffects[_currentImageIndex]
                             ['alignment'],
                         child: Stack(
@@ -707,22 +647,13 @@ class _IntroVideoScreenState extends State<IntroVideoScreen>
             left: 0,
             right: 0,
             child: Center(
-              child: AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: _pulseAnimation.value,
-                    child: child,
-                  );
-                },
-                child: Opacity(
-                  opacity: 0.25,
-                  child: Image.asset(
-                    'images/kai_symbol.png',
-                    width: 60,
-                    height: 60,
-                    errorBuilder: (_, __, ___) => const SizedBox(),
-                  ),
+              child: Opacity(
+                opacity: 0.25,
+                child: Image.asset(
+                  'images/kai_symbol.png',
+                  width: 60,
+                  height: 60,
+                  errorBuilder: (_, __, ___) => const SizedBox(),
                 ),
               ),
             ),

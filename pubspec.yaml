@@ -100,8 +100,8 @@ flutter:
     - assets/sounds/technique_rasengan_geant.mp3
     - assets/sounds/technique_mode_sage_parfait.mp3
     - assets/sounds/intro.mp3
-    # Vidéos
-    - assets/videos/
+    - assets/sounds/upgrade.mp3
+    - assets/sounds/unlock.mp3
     # Images d'intro
     - assets/images/intro/
     - assets/images/intro/intro1.png

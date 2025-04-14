@@ -5,20 +5,26 @@ import '../models/saved_game.dart';
 import '../models/technique.dart';
 import '../models/ninja.dart';
 import '../models/sensei.dart';
+import '../models/resonance.dart';
 import '../services/audio_service.dart';
 import '../services/save_service.dart';
+import '../services/resonance_service.dart';
+import '../styles/kai_colors.dart';
 import 'welcome_screen.dart';
 import 'story/story_screen.dart';
-import 'intro_video_screen.dart'; // Pour accéder à KaiColors
+import 'intro_video_screen.dart' hide KaiColors;
 import '../widgets/chakra_button.dart';
 import '../widgets/technique_list.dart';
 import '../widgets/sensei_list.dart';
+import '../widgets/resonance_list.dart';
 import '../widgets/settings_dialog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/ninja_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:math' show pow;
 import 'ranking_screen.dart';
+import 'technique_tree_screen.dart';
+import 'combat_techniques_screen.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({
@@ -49,10 +55,14 @@ class _GameScreenState extends State<GameScreen>
   int _xpForNextLevel = 100;
   int _power = 0; // Score de puissance basé sur les techniques
 
+  // Ajout d'une variable pour le combo actuel
+  int _currentCombo = 0;
+
   // Variables pour le suivi du gain d'XP
   double _xpPerSecondPassive = 0; // XP gagnée passivement par seconde
   double _xpFromClicks = 0; // XP gagnée par les clics récents
   double _totalXpPerSecond = 0; // XP totale par seconde (passive + clics)
+  double _xpPerSecond = 0; // Taux d'XP par seconde provenant des résonances
   DateTime _lastClickTime = DateTime.now(); // Horodatage du dernier clic
   List<DateTime> _clicksInLastSecond = []; // Liste des gains des clics récents
   Timer? _xpRateTimer; // Timer pour calculer le taux d'XP par seconde
@@ -71,7 +81,7 @@ class _GameScreenState extends State<GameScreen>
   int _playerSpeed = 10;
   int _playerDefense = 10;
   int _xpPerClick = 1;
-  int _passiveXp = 0;
+  double _passiveXp = 0;
   List<Technique> _playerTechniques = [];
   List<Sensei> _playerSenseis = [];
   Map<String, int> _techniqueLevels = {};
@@ -82,9 +92,22 @@ class _GameScreenState extends State<GameScreen>
   final AudioService _audioService = AudioService();
   final SaveService _saveService = SaveService();
   final NinjaService _ninjaService = NinjaService();
+  final ResonanceService _resonanceService = ResonanceService();
 
   // Techniques
   late List<Technique> _techniques = [];
+
+  // Ajout des variables pour le système de Résonance
+  List<Resonance> _allResonances = [];
+  List<Resonance> _playerResonances = [];
+  int _offlineXpGained = 0;
+  bool _offlineXpClaimed = false;
+
+  // Timer pour réinitialiser le combo
+  Timer? _comboResetTimer;
+
+  // Variables d'état du jeu
+  double _accumulatedXp = 0.0; // Accumulateur pour les fractions d'XP passive
 
   // Calculer l'XP nécessaire pour le niveau suivant
   int _calculateXPForNextLevel(int currentLevel) {
@@ -226,6 +249,9 @@ class _GameScreenState extends State<GameScreen>
 
     // Démarrer le calcul du taux d'XP par seconde
     _startXpRateCalculation();
+
+    // Initialiser les résonances par défaut si nécessaire
+    _initDefaultResonances();
   }
 
   @override
@@ -235,6 +261,7 @@ class _GameScreenState extends State<GameScreen>
     _autoSaveTimer?.cancel();
     _chakraSoundTimer?.cancel();
     _xpRateTimer?.cancel();
+    _comboResetTimer?.cancel();
 
     // Arrêter et libérer les ressources audio
     _audioService.dispose();
@@ -273,6 +300,12 @@ class _GameScreenState extends State<GameScreen>
     await _loadPlayerTechniques();
     await _loadPlayerSenseis();
 
+    // Charger les résonances du joueur
+    await _loadPlayerResonances();
+
+    // Vérifier s'il y a de l'XP accumulée hors-ligne
+    await _checkOfflineXp();
+
     // Démarrer le timer pour les calculs par seconde
     _startTimer();
 
@@ -292,6 +325,7 @@ class _GameScreenState extends State<GameScreen>
       _playerDefense = 10;
       _xpPerClick = 1;
       _passiveXp = 0;
+      _accumulatedXp = 0.0; // Réinitialiser l'accumulateur d'XP
       _currentNinja = null;
       _techniques.clear();
       _senseis.clear();
@@ -304,6 +338,12 @@ class _GameScreenState extends State<GameScreen>
       _xpFromClicks = 0;
       _totalXpPerSecond = 0;
       _clicksInLastSecond = [];
+
+      // Réinitialiser les résonances
+      _allResonances = [];
+      _playerResonances = [];
+      _offlineXpGained = 0;
+      _offlineXpClaimed = false;
     });
   }
 
@@ -541,7 +581,7 @@ class _GameScreenState extends State<GameScreen>
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          toolbarHeight: 80,
+          toolbarHeight: 70,
           backgroundColor: KaiColors.background,
           elevation: 12,
           shape: const RoundedRectangleBorder(
@@ -557,7 +597,7 @@ class _GameScreenState extends State<GameScreen>
                 colors: [
                   KaiColors.background,
                   KaiColors.background.withOpacity(0.7),
-                  KaiColors.kaiNeutral.withOpacity(0.6),
+                  KaiColors.accent.withOpacity(0.6),
                 ],
               ),
               boxShadow: [
@@ -572,110 +612,60 @@ class _GameScreenState extends State<GameScreen>
           ),
           title: Row(
             children: [
+              // Logo et nom du joueur regroupés
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 5,
-                      spreadRadius: 1,
-                    ),
-                  ],
                 ),
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  height: 42,
-                  width: 42,
-                  fit: BoxFit.contain,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          KaiColors.background,
-                          KaiColors.background.withOpacity(0.7),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(15),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
-                          blurRadius: 5,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
+                child: Row(
+                  children: [
+                    Image.asset(
+                      'assets/images/logo.png',
+                      height: 32,
+                      width: 32,
                     ),
-                    child: Text(
-                      widget.playerName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black45,
-                            blurRadius: 2,
-                            offset: Offset(1, 1),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: KaiColors.kaiNeutral.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.star,
-                          color: KaiColors.kaiNeutral,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
                         Text(
-                          'Niveau $_playerLevel',
+                          widget.playerName,
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          'Niv. $_playerLevel',
+                          style: const TextStyle(
+                            color: Colors.white,
                             fontSize: 12,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
           actions: [
+            // Indicateur de puissance
             Container(
-              margin: const EdgeInsets.only(right: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    KaiColors.kaiNeutral
-                        .withOpacity(0.7), // Couleur pour la puissance
-                    KaiColors.background.withOpacity(0.6),
+                    KaiColors.accent.withOpacity(0.7),
+                    KaiColors.primaryDark.withOpacity(0.8),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(15),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.2),
@@ -687,56 +677,117 @@ class _GameScreenState extends State<GameScreen>
               child: Row(
                 children: [
                   const Icon(
-                    Icons.bolt, // Icône de puissance
-                    color: Colors.white,
-                    size: 22,
-                    shadows: [
-                      Shadow(
-                        color: Colors.black45,
-                        blurRadius: 2,
-                        offset: Offset(1, 1),
-                      ),
-                    ],
+                    Icons.bolt, // Icône de puissance au lieu de l'éclair
+                    color: KaiColors
+                        .accent, // Couleur ambre pour mieux la distinguer
+                    size: 18,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   Text(
-                    _formatNumber(_power), // Afficher la puissance
+                    _formatNumber(
+                        _power), // Afficher la puissance au lieu de l'XP
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black45,
-                          blurRadius: 2,
-                          offset: Offset(1, 1),
-                        ),
-                      ],
+                      fontSize: 14,
                     ),
                   ),
                 ],
               ),
             ),
-            _buildActionButton(
-              icon: Icons.emoji_events,
-              tooltip: 'Classement',
-              onPressed: _openRankingScreen,
+
+            // Menu regroupant plusieurs fonctionnalités
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.menu, color: Colors.white),
+              offset: const Offset(0, 40),
+              onSelected: (value) {
+                switch (value) {
+                  case 'ranking':
+                    _openRankingScreen();
+                    break;
+                  case 'story':
+                    _goToStoryMode();
+                    break;
+                  case 'technique_tree':
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const TechniqueTreeScreen(),
+                      ),
+                    );
+                    break;
+                  case 'combat_techniques':
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CombatTechniquesScreen(),
+                      ),
+                    );
+                    break;
+                  case 'settings':
+                    _showSettingsDialog();
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'ranking',
+                  child: Row(
+                    children: [
+                      Icon(Icons.emoji_events),
+                      SizedBox(width: 8),
+                      Text('Classement'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'story',
+                  child: Row(
+                    children: [
+                      Icon(Icons.book),
+                      SizedBox(width: 8),
+                      Text('Mode Histoire'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'technique_tree',
+                  child: Row(
+                    children: [
+                      Icon(Icons.account_tree),
+                      SizedBox(width: 8),
+                      Text('Arbre des Techniques'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'combat_techniques',
+                  child: Row(
+                    children: [
+                      Icon(Icons.sports_kabaddi),
+                      SizedBox(width: 8),
+                      Text('Techniques de Combat'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'settings',
+                  child: Row(
+                    children: [
+                      Icon(Icons.settings),
+                      SizedBox(width: 8),
+                      Text('Paramètres'),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            _buildActionButton(
-              icon: Icons.book,
-              tooltip: 'Mode Histoire',
-              onPressed: _goToStoryMode,
-            ),
-            _buildActionButton(
-              icon: Icons.settings,
-              tooltip: 'Paramètres',
-              onPressed: _showSettingsDialog,
-            ),
-            _buildActionButton(
-              icon: Icons.exit_to_app,
-              tooltip: 'Quitter',
+
+            // Bouton Quitter conservé séparément
+            IconButton(
+              icon: const Icon(Icons.exit_to_app, color: Colors.white),
               onPressed: _returnToMainMenu,
-              rightMargin: 12,
+              tooltip: 'Quitter',
             ),
           ],
           bottom: TabBar(
@@ -754,8 +805,8 @@ class _GameScreenState extends State<GameScreen>
               borderRadius: BorderRadius.circular(2),
               gradient: LinearGradient(
                 colors: [
-                  KaiColors.kaiNeutral.withOpacity(0.6),
-                  KaiColors.kaiNeutral.withOpacity(0.3),
+                  KaiColors.accent.withOpacity(0.6),
+                  KaiColors.accent.withOpacity(0.3),
                 ],
               ),
               boxShadow: [
@@ -770,31 +821,23 @@ class _GameScreenState extends State<GameScreen>
             unselectedLabelColor: Colors.white.withOpacity(0.7),
             tabs: [
               Tab(
-                icon: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.bolt, size: 20),
-                      SizedBox(width: 8),
-                      Text('Techniques'),
-                    ],
-                  ),
+                icon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.auto_fix_high, size: 18),
+                    SizedBox(width: 4),
+                    Text('Résonances'),
+                  ],
                 ),
               ),
               Tab(
-                icon: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.people, size: 20),
-                      SizedBox(width: 8),
-                      Text('Senseis'),
-                    ],
-                  ),
+                icon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.people, size: 18),
+                    SizedBox(width: 4),
+                    Text('Senseis'),
+                  ],
                 ),
               ),
             ],
@@ -820,187 +863,100 @@ class _GameScreenState extends State<GameScreen>
             ),
             child: Column(
               children: [
-                // Partie supérieure avec Naruto et les statistiques
+                // Partie supérieure avec le bouton de chakra et les stats
                 Expanded(
                   flex: 2,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Zone cliquable principale avec l'image de Naruto
-                        Expanded(
-                          child: Center(
-                            child: ChakraButton(
-                              onTap: _incrementerPuissance,
-                              puissance: _totalXP,
-                            ),
-                          ),
+                  child: Column(
+                    children: [
+                      // Indicateur de génération XP passive
+                      Container(
+                        margin: const EdgeInsets.only(
+                            top: 16, bottom: 16, left: 16, right: 16),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: KaiColors.accent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: KaiColors.accent.withOpacity(0.3)),
                         ),
-
-                        // Statistiques
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          margin: const EdgeInsets.all(15),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Colors.white,
-                                Colors.white,
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.access_time,
+                                    color: KaiColors.primaryDark, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Génération passive: ',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: KaiColors.primaryDark,
+                                  ),
+                                ),
+                                Text(
+                                  '${_xpPerSecondPassive.toStringAsFixed(3)} XP/s',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Colors.green[700],
+                                  ),
+                                ),
                               ],
                             ),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 10,
-                                offset: const Offset(0, 3),
+                            if (_playerResonances.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Somme des résonances actives (${_playerResonances.where((r) => r.isUnlocked).length})',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[600],
+                                  fontStyle: FontStyle.italic,
+                                ),
                               ),
                             ],
-                            border: Border.all(
-                              color: KaiColors.background.withOpacity(0.2),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue
-                                              .shade600, // Couleur bleue pour l'XP
-                                          shape: BoxShape.circle,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color:
-                                                  Colors.black.withOpacity(0.2),
-                                              blurRadius: 4,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ],
-                                        ),
-                                        child: const Icon(
-                                          Icons
-                                              .whatshot, // Nouvelle icône pour l'XP
-                                          color: Colors.white,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Text(
-                                            'XP',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                          Text(
-                                            _formatNumber(_totalXP),
-                                            style: TextStyle(
-                                              fontSize: 22,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.blue
-                                                  .shade800, // Couleur bleue pour l'XP
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.green.shade600,
-                                          shape: BoxShape.circle,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color:
-                                                  Colors.black.withOpacity(0.2),
-                                              blurRadius: 4,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ],
-                                        ),
-                                        child: const Icon(
-                                          Icons.speed,
-                                          color: Colors.white,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Text(
-                                            'XP/seconde',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                          Row(
-                                            children: [
-                                              Text(
-                                                _formatNumber(
-                                                    _totalXpPerSecond),
-                                                style: TextStyle(
-                                                  fontSize: 22,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.green.shade800,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 4),
-                                              if (_xpFromClicks > 0)
-                                                Text(
-                                                  '(+${_formatNumber(_xpFromClicks)} clics)',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                    color:
-                                                        Colors.purple.shade600,
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ],
+                          ],
+                        ),
+                      ),
+
+                      // Bouton Chakra
+                      Expanded(
+                        child: Center(
+                          child: ChakraButton(
+                            onTap: (gainXp) => _incrementerXp(gainXp),
+                            puissance: _currentCombo,
+                            totalXP: _totalXP,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+
+                      // Statistiques
+                    ],
                   ),
                 ),
 
-                // Section des techniques et senseis avec TabBarView
+                // Section des onglets avec TabBarView
                 Expanded(
+                  flex: 2, // Agrandir la section des Résonances/Senseis
                   child: TabBarView(
                     children: [
-                      // Onglet des techniques
-                      _buildTechniquesList(),
+                      // Premier onglet: Résonances
+                      ResonanceList(
+                        resonances: _allResonances,
+                        xp: _totalXP,
+                        onUnlockResonance: _unlockResonance,
+                        onUpgradeResonance: _upgradeResonance,
+                        onRefresh: _loadPlayerResonances,
+                      ),
 
-                      // Onglet des senseis
-                      _buildSenseisList(),
+                      // Deuxième onglet: Senseis
+                      SenseiList(
+                        senseis: _senseis,
+                        puissance: _totalXP,
+                        onAcheterSensei: _acheterSensei,
+                        onAmeliorerSensei: _ameliorerSensei,
+                      ),
                     ],
                   ),
                 ),
@@ -1008,40 +964,6 @@ class _GameScreenState extends State<GameScreen>
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  // Helper pour créer un bouton d'action stylisé
-  Widget _buildActionButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onPressed,
-    double rightMargin = 4,
-  }) {
-    return Container(
-      margin: EdgeInsets.only(right: rightMargin),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: IconButton(
-        icon: Icon(
-          icon,
-          color: Colors.white,
-          size: 24,
-          shadows: const [
-            Shadow(
-              color: Colors.black45,
-              blurRadius: 2,
-              offset: Offset(1, 1),
-            ),
-          ],
-        ),
-        onPressed: onPressed,
-        tooltip: tooltip,
-        splashRadius: 24,
-        padding: const EdgeInsets.all(8),
       ),
     );
   }
@@ -1056,895 +978,6 @@ class _GameScreenState extends State<GameScreen>
       return '${(number / 1000).toStringAsFixed(1)}K';
     } else {
       return number.toString();
-    }
-  }
-
-  // Formater le temps écoulé depuis la dernière connexion
-  String _formatTimeSinceLastConnection(Duration duration) {
-    if (duration.inDays > 0) {
-      return '${duration.inDays} jour${duration.inDays > 1 ? 's' : ''}';
-    } else if (duration.inHours > 0) {
-      return '${duration.inHours} heure${duration.inHours > 1 ? 's' : ''}';
-    } else if (duration.inMinutes > 0) {
-      return '${duration.inMinutes} minute${duration.inMinutes > 1 ? 's' : ''}';
-    } else {
-      return '${duration.inSeconds} seconde${duration.inSeconds > 1 ? 's' : ''}';
-    }
-  }
-
-  // Afficher une boîte de dialogue pour les gains obtenus hors ligne
-  void _showOfflineGainDialog(int xpGained, Duration timeSinceLastConnection) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Gains pendant votre absence',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: KaiColors.background,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-                'Pendant votre absence de ${_formatTimeSinceLastConnection(timeSinceLastConnection)}, vos senseis ont généré:'),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.bolt, color: KaiColors.kaiNeutral, size: 28),
-                const SizedBox(width: 8),
-                Text(
-                  '+${_formatNumber(xpGained)} XP',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: KaiColors.background,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Continuez à recruter des senseis pour gagner plus de puissance même lorsque vous êtes absent !',
-              style: TextStyle(
-                color: Colors.grey.shade700,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: KaiColors.background,
-            ),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child:
-                const Text('Genial !', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Affichage amélioré de la liste des techniques
-  Widget _buildTechniquesList() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.white,
-            Colors.white,
-          ],
-        ),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.bolt, color: KaiColors.background),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Techniques Ninja',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-                Text(
-                  'Total: ${_techniques.length}',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              itemCount: _techniques.length,
-              itemBuilder: (context, index) {
-                final technique = _techniques[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                      color: technique.niveau > 0
-                          ? KaiColors.background.withOpacity(0.2)
-                          : Colors.transparent,
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Avatar de la technique
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: KaiColors.background.withOpacity(0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Icon(
-                              _getTechniqueIcon(technique),
-                              color: KaiColors.background,
-                              size: 18,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Zone centrale: nom, niveau, description
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Nom de la technique
-                              Text(
-                                technique.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              // Description
-                              Text(
-                                technique.description,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade700,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              // Badge de niveau
-                              if (technique.niveau > 0)
-                                Container(
-                                  margin: const EdgeInsets.only(top: 2),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: KaiColors.background,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    'Niv. ${technique.niveau}',
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        // Bouton d'achat
-                        SizedBox(
-                          height: 24,
-                          child: ElevatedButton(
-                            onPressed: _totalXP >= technique.cost
-                                ? () => _acheterTechnique(technique)
-                                : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors
-                                  .blue.shade600, // Couleur bleue pour l'XP
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 0,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.whatshot,
-                                    size: 10, color: Colors.white),
-                                const SizedBox(width: 2),
-                                Text(
-                                  _formatNumber(technique.cost),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                                const SizedBox(width: 2),
-                                const Text(
-                                  "XP",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 8,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Affichage amélioré de la liste des senseis
-  Widget _buildSenseisList() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.white,
-            Colors.blue.shade50,
-          ],
-        ),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.people, color: Colors.indigo.shade800),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Senseis',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-                Text(
-                  'Total: ${_senseis.length}',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              itemCount: _senseis.length,
-              itemBuilder: (context, index) {
-                final sensei = _senseis[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                      color: sensei.quantity > 0
-                          ? Colors.indigo.shade200
-                          : Colors.transparent,
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Première ligne: Avatar, Nom et Badges
-                        Row(
-                          children: [
-                            // Avatar du sensei
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade100,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Center(
-                                child: Icon(
-                                  Icons.person,
-                                  color: Colors.indigo.shade800,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            // Nom et badges
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          sensei.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Row(
-                                    children: [
-                                      if (sensei.quantity > 0)
-                                        Container(
-                                          margin:
-                                              const EdgeInsets.only(right: 4),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.indigo.shade800,
-                                            borderRadius:
-                                                BorderRadius.circular(10),
-                                          ),
-                                          child: Text(
-                                            'x${sensei.quantity}',
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      if (sensei.level > 1)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.amber.shade700,
-                                            borderRadius:
-                                                BorderRadius.circular(10),
-                                          ),
-                                          child: Text(
-                                            'Niv. ${sensei.level}',
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Production par seconde
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade100,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                '${_formatNumber(sensei.getTotalXpPerSecond())}/s',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                  color: Colors.green.shade700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        // Description du sensei
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              top: 4, bottom: 4, left: 48),
-                          child: Text(
-                            sensei.description,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade700,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-
-                        // Boutons d'action
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            // Bouton d'achat (uniquement si quantity = 0)
-                            if (sensei.quantity == 0)
-                              SizedBox(
-                                height: 24,
-                                child: ElevatedButton(
-                                  onPressed: _totalXP >= sensei.getCurrentCost()
-                                      ? () => _acheterSensei(sensei)
-                                      : null,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue
-                                        .shade600, // Couleur bleue pour l'XP
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 0,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.whatshot,
-                                          size: 10, color: Colors.white),
-                                      const SizedBox(width: 2),
-                                      Text(
-                                        _formatNumber(sensei.getCurrentCost()),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 2),
-                                      const Text(
-                                        "XP",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 8,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            // Bouton d'amélioration (toujours visible si quantity > 0)
-                            if (sensei.quantity > 0)
-                              SizedBox(
-                                height: 24,
-                                child: ElevatedButton(
-                                  onPressed:
-                                      _totalXP >= sensei.getCurrentCost() * 2
-                                          ? () => _ameliorerSensei(sensei)
-                                          : null,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.amber.shade700,
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 0,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.whatshot,
-                                          size: 10, color: Colors.white),
-                                      const SizedBox(width: 2),
-                                      Text(
-                                        _formatNumber(
-                                            sensei.getCurrentCost() * 2),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 2),
-                                      const Text(
-                                        "XP",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 8,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      const Icon(
-                                        Icons.upgrade,
-                                        size: 12,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Obtenir l'icône appropriée pour une technique
-  IconData _getTechniqueIcon(Technique technique) {
-    switch (technique.effect) {
-      case 'damage':
-        return Icons.flash_on;
-      case 'clone':
-        return Icons.people;
-      case 'boost':
-        return Icons.trending_up;
-      case 'warp':
-        return Icons.sync;
-      case 'summon':
-        return Icons.pets;
-      case 'area_damage':
-        return Icons.radar;
-      case 'copy':
-        return Icons.remove_red_eye;
-      default:
-        return Icons.extension;
-    }
-  }
-
-  // Méthode pour démarrer le timer
-  void _startTimer() {
-    // Démarrer la génération automatique de puissance
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _genererPuissanceAutomatique();
-    });
-
-    // Configurer la sauvegarde automatique toutes les 2 minutes
-    _autoSaveTimer = Timer.periodic(const Duration(minutes: 2), (timer) async {
-      await _saveGame();
-      print('Sauvegarde automatique effectuée');
-    });
-
-    // Démarrer le calcul du taux d'XP par seconde
-    _startXpRateCalculation();
-  }
-
-  // Méthode pour démarrer le calcul du taux d'XP par seconde
-  void _startXpRateCalculation() {
-    // Calcul initial
-    _updateXpPerSecond();
-
-    // Mettre à jour toutes les secondes
-    _xpRateTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      _updateXpPerSecond();
-    });
-  }
-
-  // Mettre à jour le taux d'XP par seconde
-  void _updateXpPerSecond() {
-    // Calculer l'XP passive (des senseis)
-    final int passiveXp =
-        _senseis.fold(0, (sum, s) => sum + s.getTotalXpPerSecond());
-
-    // Filtrer les clics des 5 dernières secondes
-    final now = DateTime.now();
-    _clicksInLastSecond = _clicksInLastSecond.where((timestamp) {
-      return now.difference(timestamp).inSeconds < 5;
-    }).toList();
-
-    // Calculer l'XP moyenne des clics récents par seconde
-    final int clickXpPerSecond = _clicksInLastSecond.isEmpty
-        ? 0
-        : (_clicksInLastSecond.length ~/ 5) * _xpPerClick;
-
-    setState(() {
-      _xpPerSecondPassive = passiveXp.toDouble();
-      _xpFromClicks = clickXpPerSecond.toDouble();
-      _totalXpPerSecond = (passiveXp + clickXpPerSecond).toDouble();
-    });
-  }
-
-  // Générer de la puissance automatiquement (à chaque tick du timer)
-  void _genererPuissanceAutomatique() {
-    if (_senseis.isEmpty) return;
-
-    double puissanceGeneree = 0;
-    for (var sensei in _senseis) {
-      puissanceGeneree += sensei.getTotalXpPerSecond();
-    }
-
-    if (puissanceGeneree > 0) {
-      setState(() {
-        _totalXP += puissanceGeneree.round();
-        _updateXP();
-      });
-    }
-  }
-
-  // Méthode appelée lors du clic sur le chakra button
-  void _incrementerPuissance(int bonusXp, double multiplier) {
-    final int xpGain = (_xpPerClick * multiplier).round() + bonusXp;
-    setState(() {
-      _totalXP += xpGain;
-      _updateXP();
-      _clicksInLastSecond.add(DateTime.now());
-    });
-  }
-
-  void _updateXP() {
-    // Mettre à jour le ninja en base de données
-    if (_currentNinja != null) {
-      _currentNinja!.xp = _totalXP;
-      _ninjaService.updateNinja(_currentNinja!);
-    }
-
-    // Recalculer la puissance basée sur les techniques plutôt que sur l'XP
-    _calculatePower();
-  }
-
-  // Méthode pour charger les senseis depuis Firebase
-  Future<void> _loadSenseis() async {
-    try {
-      // D'abord charger tous les senseis disponibles
-      final snapshot =
-          await FirebaseFirestore.instance.collection('senseis').get();
-
-      if (snapshot.docs.isEmpty) {
-        print('Aucun sensei trouvé dans Firebase');
-        return;
-      }
-
-      // Liste des senseis disponibles
-      final availableSenseis =
-          snapshot.docs.map((doc) => Sensei.fromFirestore(doc)).toList();
-
-      setState(() {
-        _senseis = availableSenseis;
-      });
-
-      print('${_senseis.length} senseis chargés depuis Firebase');
-
-      // Ensuite, si un ninja est actif, charger ses senseis pour les niveaux et quantités
-      if (_currentNinja != null) {
-        final ninjaSenseis =
-            await _ninjaService.getNinjaSenseis(_currentNinja!.id);
-
-        if (ninjaSenseis.isNotEmpty) {
-          setState(() {
-            // Mettre à jour les niveaux et quantités des senseis existants
-            for (var ninjaSensei in ninjaSenseis) {
-              final index = _senseis.indexWhere((s) => s.id == ninjaSensei.id);
-              if (index >= 0) {
-                _senseis[index].level = ninjaSensei.level;
-                _senseis[index].quantity = ninjaSensei.quantity;
-              }
-            }
-          });
-
-          print(
-              'Niveaux et quantités des senseis mis à jour: ${ninjaSenseis.length} senseis du ninja');
-        }
-      }
-    } catch (e) {
-      print('Erreur lors du chargement des senseis: $e');
-    }
-  }
-
-  // Méthode pour acheter une technique
-  void _acheterTechnique(Technique technique) {
-    if (_totalXP >= technique.cost) {
-      // Utiliser l'XP au lieu de la puissance
-      // Sauvegarder l'état précédent pour pouvoir annuler en cas d'erreur
-      final previousLevel = technique.niveau;
-
-      // Mettre à jour l'état localement
-      setState(() {
-        _totalXP -= technique.cost; // Déduire de l'XP
-        technique.level =
-            technique.level + 1; // Modifier directement level au lieu de niveau
-      });
-
-      // Recalculer la puissance après l'achat
-      _calculatePower();
-
-      // Sauvegarder l'achat de la technique dans Firebase
-      if (_currentNinja != null) {
-        try {
-          print('==================== ACHAT DE TECHNIQUE ====================');
-          print('ID de la technique à acheter: ${technique.id}');
-          print('Niveau avant achat: ${previousLevel}');
-          print('Nouveau niveau: ${technique.niveau}');
-
-          // Utiliser addTechniqueToNinja qui gère l'ajout ou mise à jour
-          _ninjaService
-              .addTechniqueToNinja(_currentNinja!.id, technique.id)
-              .then((_) {
-            print('✅ Technique sauvegardée en DB: ${technique.name}');
-
-            // Vérifier que la technique apparaît bien comme apprise
-            print('Level final: ${technique.level}');
-            print('Niveau final: ${technique.niveau}');
-
-            // Jouer le son de la technique
-            _audioService.playTechniqueSound(technique.son);
-
-            // Force la mise à jour de l'interface
-            setState(() {});
-
-            // Sauvegarde complète
-            _saveGame();
-          }).catchError((error) {
-            // En cas d'erreur, restaurer l'état précédent
-            setState(() {
-              _totalXP += technique.cost;
-              technique.level = previousLevel;
-            });
-
-            print('⚠️ Erreur lors de l\'achat de la technique: $error');
-          });
-        } catch (e) {
-          // En cas d'erreur, restaurer l'état précédent
-          setState(() {
-            _totalXP += technique.cost;
-            technique.level = previousLevel;
-          });
-
-          print('⚠️ Erreur lors de l\'achat de la technique: $e');
-        }
-      }
-    }
-  }
-
-  // Méthode pour acheter un sensei
-  void _acheterSensei(Sensei sensei) {
-    final cout = sensei.getCurrentCost();
-    // Vérifier que le sensei n'a pas déjà été acheté
-    if (_totalXP >= cout && sensei.quantity == 0) {
-      // Utiliser l'XP au lieu de la puissance
-      setState(() {
-        _totalXP -= cout; // Déduire de l'XP
-        sensei.quantity += 1;
-      });
-
-      // Sauvegarder dans Firebase
-      if (_currentNinja != null) {
-        _ninjaService.addSenseiToNinja(_currentNinja!.id, sensei.id);
-        print(
-            'Sensei ${sensei.name} ajouté au ninja ${_currentNinja!.name} (Quantité: ${sensei.quantity})');
-
-        // Sauvegarde automatique après l'achat d'un sensei
-        _saveGame();
-      }
-    }
-  }
-
-  // Méthode pour améliorer un sensei
-  void _ameliorerSensei(Sensei sensei) {
-    // Coût d'amélioration (par exemple 2x le coût d'achat)
-    final cout = sensei.getCurrentCost() * 2;
-    if (_totalXP >= cout && sensei.quantity > 0) {
-      // Utiliser l'XP au lieu de la puissance
-      setState(() {
-        _totalXP -= cout; // Déduire de l'XP
-        sensei.level += 1;
-      });
-
-      // Sauvegarder dans Firebase
-      if (_currentNinja != null) {
-        _ninjaService.upgradeSensei(_currentNinja!.id, sensei.id);
-        print('Sensei ${sensei.name} amélioré au niveau ${sensei.level}');
-
-        // Sauvegarde automatique après l'amélioration d'un sensei
-        _saveGame();
-      }
-    }
-  }
-
-  // Sauvegarder la partie actuelle
-  Future<void> _saveGame() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-
-      if (user != null && _currentNinja != null) {
-        // Mettre à jour le ninja avec les valeurs actuelles
-        _currentNinja!.xp = _totalXP; // Sauvegarder l'XP totale
-        _currentNinja!.level = _playerLevel;
-        _currentNinja!.power = _power; // Sauvegarder le score de puissance
-
-        // Mettre à jour les autres attributs du ninja selon les besoins
-        _currentNinja!.passiveXp =
-            _senseis.fold(0, (sum, s) => sum + s.getTotalXpPerSecond()).toInt();
-
-        // Mettre à jour la date de dernière connexion
-        _currentNinja!.lastConnected = DateTime.now();
-
-        // Mettre à jour le ninja dans Firebase
-        await _ninjaService.updateNinja(_currentNinja!);
-        print(
-            'Ninja sauvegardé: ${_currentNinja!.name} (${_currentNinja!.xp} XP, niveau ${_currentNinja!.level})');
-
-        // Mettre à jour les techniques et senseis si nécessaire
-        // (code de sauvegarde supplémentaire si besoin)
-      }
-    } catch (e) {
-      print('Erreur lors de la sauvegarde: $e');
     }
   }
 
@@ -2039,7 +1072,7 @@ class _GameScreenState extends State<GameScreen>
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: KaiColors.background,
+                backgroundColor: KaiColors.primaryDark,
               ),
               child: const Text(
                 'Quitter',
@@ -2050,5 +1083,492 @@ class _GameScreenState extends State<GameScreen>
         );
       },
     );
+  }
+
+  // Méthode pour incrémenter l'XP en cliquant, ajustée pour le ChakraButton
+  void _incrementerXp(int bonusXp, [double multiplier = 1.0]) {
+    // Ne pas multiplier le xpPerClick, utiliser uniquement le bonusXp qui est envoyé par le ChakraButton
+    final int xpGain = bonusXp;
+
+    setState(() {
+      _totalXP += xpGain;
+      _updatePlayerLevel();
+      _clicksInLastSecond.add(DateTime.now());
+      // Incrémenter le compteur de combo (sera montré sur le bouton)
+      _currentCombo++;
+    });
+
+    // Réinitialiser le compteur de combo après 1.5 secondes d'inactivité
+    _startComboResetTimer();
+  }
+
+  // Démarrer un timer pour réinitialiser le combo
+  void _startComboResetTimer() {
+    // Annuler l'ancien timer s'il existe
+    _comboResetTimer?.cancel();
+
+    // Réduire le délai à 250ms pour correspondre à l'animation plus rapide
+    _comboResetTimer = Timer(const Duration(milliseconds: 250), () {
+      setState(() {
+        _currentCombo = 0;
+      });
+    });
+  }
+
+  // Méthode pour démarrer le timer
+  void _startTimer() {
+    // Démarrer la génération automatique de puissance
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _genererPuissanceAutomatique();
+    });
+
+    // Configurer la sauvegarde automatique toutes les 2 minutes
+    _autoSaveTimer = Timer.periodic(const Duration(minutes: 2), (timer) async {
+      await _saveGame();
+      print('Sauvegarde automatique effectuée');
+    });
+  }
+
+  // Générer de la puissance automatiquement (à chaque tick du timer)
+  void _genererPuissanceAutomatique() {
+    // S'assurer que nous avons une valeur positive d'XP passive
+    if (_xpPerSecondPassive <= 0) {
+      // Actualiser la valeur depuis les résonances au cas où elle n'aurait pas été mise à jour
+      _updatePassiveXpRate();
+      return;
+    }
+
+    setState(() {
+      // Ajouter l'XP passive à l'accumulateur
+      _accumulatedXp += _xpPerSecondPassive;
+
+      // Extraire la partie entière
+      int xpToAdd = _accumulatedXp.floor();
+
+      // Si nous avons au moins 1 XP entier à ajouter
+      if (xpToAdd > 0) {
+        _totalXP += xpToAdd;
+        // Ne conserver que la partie fractionnelle pour la prochaine fois
+        _accumulatedXp -= xpToAdd;
+      }
+
+      _updatePlayerLevel();
+    });
+  }
+
+  // Méthode pour charger les senseis depuis Firebase
+  Future<void> _loadSenseis() async {
+    try {
+      // D'abord charger tous les senseis disponibles
+      final snapshot =
+          await FirebaseFirestore.instance.collection('senseis').get();
+
+      if (snapshot.docs.isEmpty) {
+        print('Aucun sensei trouvé dans Firebase');
+        return;
+      }
+
+      // Liste des senseis disponibles
+      final availableSenseis =
+          snapshot.docs.map((doc) => Sensei.fromFirestore(doc)).toList();
+
+      setState(() {
+        _senseis = availableSenseis;
+      });
+
+      print('${_senseis.length} senseis chargés depuis Firebase');
+
+      // Ensuite, si un ninja est actif, charger ses senseis pour les niveaux et quantités
+      if (_currentNinja != null) {
+        final ninjaSenseis =
+            await _ninjaService.getNinjaSenseis(_currentNinja!.id);
+
+        if (ninjaSenseis.isNotEmpty) {
+          setState(() {
+            // Mettre à jour les niveaux et quantités des senseis existants
+            for (var ninjaSensei in ninjaSenseis) {
+              final index = _senseis.indexWhere((s) => s.id == ninjaSensei.id);
+              if (index >= 0) {
+                _senseis[index].level = ninjaSensei.level;
+                _senseis[index].quantity = ninjaSensei.quantity;
+              }
+            }
+          });
+
+          print(
+              'Niveaux et quantités des senseis mis à jour: ${ninjaSenseis.length} senseis du ninja');
+        }
+      }
+    } catch (e) {
+      print('Erreur lors du chargement des senseis: $e');
+    }
+  }
+
+  // Méthode pour acheter un sensei
+  void _acheterSensei(Sensei sensei) {
+    final cout = sensei.getCurrentCost();
+    // Vérifier que le sensei n'a pas déjà été acheté
+    if (_totalXP >= cout && sensei.quantity == 0) {
+      // Utiliser l'XP au lieu de la puissance
+      setState(() {
+        _totalXP -= cout; // Déduire de l'XP
+        sensei.quantity += 1;
+      });
+
+      // Sauvegarder dans Firebase
+      if (_currentNinja != null) {
+        _ninjaService.addSenseiToNinja(_currentNinja!.id, sensei.id);
+        print(
+            'Sensei ${sensei.name} ajouté au ninja ${_currentNinja!.name} (Quantité: ${sensei.quantity})');
+
+        // Sauvegarde automatique après l'achat d'un sensei
+        _saveGame();
+      }
+    }
+  }
+
+  // Méthode pour améliorer un sensei
+  void _ameliorerSensei(Sensei sensei) {
+    // Coût d'amélioration (par exemple 2x le coût d'achat)
+    final cout = sensei.getCurrentCost() * 2;
+    if (_totalXP >= cout && sensei.quantity > 0) {
+      // Utiliser l'XP au lieu de la puissance
+      setState(() {
+        _totalXP -= cout; // Déduire de l'XP
+        sensei.level += 1;
+      });
+
+      // Sauvegarder dans Firebase
+      if (_currentNinja != null) {
+        _ninjaService.upgradeSensei(_currentNinja!.id, sensei.id);
+        print('Sensei ${sensei.name} amélioré au niveau ${sensei.level}');
+
+        // Sauvegarde automatique après l'amélioration d'un sensei
+        _saveGame();
+      }
+    }
+  }
+
+  // Sauvegarder la partie actuelle
+  Future<void> _saveGame() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user != null && _currentNinja != null) {
+        // Mettre à jour le ninja avec les valeurs actuelles
+        _currentNinja!.xp = _totalXP; // Sauvegarder l'XP totale
+        _currentNinja!.level = _playerLevel;
+        _currentNinja!.power = _power; // Sauvegarder le score de puissance
+
+        // Mettre à jour les autres attributs du ninja selon les besoins
+        _currentNinja!.passiveXp = _passiveXp;
+
+        // Mettre à jour la date de dernière connexion
+        _currentNinja!.lastConnected = DateTime.now();
+
+        // Mettre à jour le ninja dans Firebase
+        await _ninjaService.updateNinja(_currentNinja!);
+        print(
+            'Ninja sauvegardé: ${_currentNinja!.name} (${_currentNinja!.xp} XP, niveau ${_currentNinja!.level})');
+      }
+    } catch (e) {
+      print('Erreur lors de la sauvegarde: $e');
+    }
+  }
+
+  // Vérifier s'il y a de l'XP accumulée hors-ligne
+  Future<void> _checkOfflineXp() async {
+    if (_currentNinja == null) return;
+
+    // Calculer l'XP hors-ligne
+    final offlineXp = await _resonanceService.calculateOfflineXp(
+        _currentNinja!.id, _currentNinja!.lastConnected);
+
+    if (offlineXp > 0) {
+      setState(() {
+        _offlineXpGained = offlineXp;
+        _offlineXpClaimed = false;
+      });
+
+      // Afficher la notification d'XP hors-ligne
+      _showOfflineXpDialog();
+    }
+  }
+
+  // Afficher la notification d'XP hors-ligne
+  void _showOfflineXpDialog() {
+    if (_offlineXpGained <= 0 || _offlineXpClaimed) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('XP Passive Accumulée'),
+          content: Text(
+            'Pendant votre absence, vos Résonances ont généré $_offlineXpGained XP!',
+            style: const TextStyle(fontSize: 16),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _claimOfflineXp();
+              },
+              child: const Text('Récupérer'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  // Récupérer l'XP hors-ligne
+  void _claimOfflineXp() {
+    if (_offlineXpGained <= 0 || _offlineXpClaimed) return;
+
+    setState(() {
+      _addXP(_offlineXpGained);
+      _offlineXpClaimed = true;
+      _offlineXpGained = 0;
+    });
+  }
+
+  // Débloquer une résonance
+  Future<void> _unlockResonance(Resonance resonance) async {
+    if (_currentNinja == null || _totalXP < resonance.xpCostToUnlock) return;
+
+    // Soustraire le coût
+    setState(() {
+      _totalXP -= resonance.xpCostToUnlock;
+    });
+
+    // Débloquer la résonance
+    final success =
+        await _resonanceService.unlockResonance(_currentNinja!.id, resonance);
+
+    if (success) {
+      // Mettre à jour l'affichage
+      await _loadPlayerResonances();
+
+      // Jouer un son
+      _audioService.playSound('unlock.mp3');
+    } else {
+      // Rembourser le joueur en cas d'échec
+      setState(() {
+        _totalXP += resonance.xpCostToUnlock;
+      });
+    }
+  }
+
+  // Améliorer le niveau de lien d'une résonance
+  Future<void> _upgradeResonance(Resonance resonance) async {
+    if (_currentNinja == null || !resonance.isUnlocked) return;
+
+    // Vérifier que le niveau actuel est strictement inférieur au niveau maximum
+    if (resonance.linkLevel >= resonance.maxLinkLevel) {
+      print(
+          'Cette résonance a déjà atteint son niveau maximum (${resonance.maxLinkLevel})');
+      return;
+    }
+
+    final upgradeCost = resonance.getUpgradeCost();
+
+    if (_totalXP < upgradeCost) return;
+
+    // Soustraire le coût
+    setState(() {
+      _totalXP -= upgradeCost;
+    });
+
+    // Enregistrer l'amélioration
+    resonance.linkLevel++;
+    final success = await _resonanceService.upgradeResonanceLink(
+        _currentNinja!.id, resonance);
+
+    if (success) {
+      // Mettre à jour l'affichage
+      await _loadPlayerResonances();
+
+      // Jouer un son
+      _audioService.playSound('upgrade.mp3');
+    } else {
+      // Rembourser le joueur en cas d'échec
+      setState(() {
+        _totalXP += upgradeCost;
+      });
+      resonance.linkLevel--;
+    }
+  }
+
+  // Charger les résonances du joueur
+  Future<void> _loadPlayerResonances() async {
+    if (_currentNinja == null) {
+      print("Aucun ninja actif pour charger les résonances");
+      return;
+    }
+
+    try {
+      // Charger toutes les résonances disponibles
+      final allResonances = await _resonanceService.getAllResonances();
+
+      // Charger les résonances du joueur
+      final playerResonances =
+          await _resonanceService.getNinjaResonances(_currentNinja!.id);
+
+      // Si le joueur n'a pas encore de résonances, initialiser avec toutes les résonances disponibles
+      if (playerResonances.isEmpty) {
+        setState(() {
+          _allResonances = allResonances;
+          _playerResonances = [];
+        });
+      } else {
+        // Fusionner les résonances du joueur avec toutes les résonances disponibles
+        final availableResonanceIds =
+            playerResonances.map((r) => r.id).toList();
+        final otherResonances = allResonances
+            .where((r) => !availableResonanceIds.contains(r.id))
+            .toList();
+
+        setState(() {
+          _playerResonances = playerResonances;
+          _allResonances = [...playerResonances, ...otherResonances];
+        });
+      }
+
+      print("Résonances du joueur chargées: ${_playerResonances.length}");
+      print("Total des résonances disponibles: ${_allResonances.length}");
+
+      // Mettre à jour l'XP passive par heure
+      await _updatePassiveXpRate();
+    } catch (e) {
+      print("Erreur lors du chargement des résonances du joueur: $e");
+    }
+  }
+
+  // Mettre à jour le taux d'XP passive par heure
+  Future<void> _updatePassiveXpRate() async {
+    if (_currentNinja == null) return;
+
+    try {
+      // Calculer directement le taux d'XP par seconde à partir des résonances chargées
+      print('========== CALCUL DU TAUX D\'XP PASSIVE ==========');
+      double totalXpPerSecond = 0;
+
+      // Afficher toutes les résonances débloquées pour le débogage
+      for (var resonance in _playerResonances) {
+        print('Résonance: ${resonance.name}');
+        print('  isUnlocked = ${resonance.isUnlocked}');
+        print('  linkLevel = ${resonance.linkLevel}');
+        print('  xpPerSecond (base) = ${resonance.xpPerSecond}');
+
+        if (resonance.isUnlocked) {
+          final xpContribution = resonance.getXpPerSecond();
+          totalXpPerSecond += xpContribution;
+          print(
+              '  --> Contribution XP/s = $xpContribution (${resonance.getXpPerSecondFormatted()})');
+        } else {
+          print('  --> Non débloquée, pas de contribution XP');
+        }
+      }
+
+      print('Total XP/s calculé: $totalXpPerSecond');
+
+      // Mettre à jour les valeurs locales
+      setState(() {
+        // Ne pas arrondir avec ceil(), utiliser la valeur exacte
+        _passiveXp =
+            totalXpPerSecond; // Utiliser round() au lieu de ceil() pour être plus précis
+        _xpPerSecondPassive =
+            totalXpPerSecond; // Garder la valeur exacte pour l'affichage
+      });
+
+      print(
+          'Taux d\'XP passive mis à jour: $_passiveXp XP/s (valeur exacte: $_xpPerSecondPassive)');
+      print('================================================');
+
+      // Mettre à jour le ninja dans la base de données (en parallèle)
+      if (_currentNinja != null) {
+        _currentNinja!.passiveXp = _passiveXp;
+        _resonanceService.updateNinjaWithPassiveXp(_currentNinja!);
+      }
+    } catch (e) {
+      print('Erreur lors de la mise à jour du taux d\'XP passive: $e');
+    }
+  }
+
+  // Méthode pour démarrer le calcul du taux d'XP par seconde
+  void _startXpRateCalculation() {
+    _xpRateTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        // Nettoyer les clics plus vieux qu'une seconde
+        _clicksInLastSecond.removeWhere(
+            (clickTime) => DateTime.now().difference(clickTime).inSeconds >= 1);
+
+        // Calculer l'XP provenant des clics récents
+        _xpFromClicks = _clicksInLastSecond.length * _xpPerClick.toDouble();
+
+        // Calculer l'XP passive (basée sur les résonances et senseis)
+        _xpPerSecondPassive = _passiveXp.toDouble();
+
+        // Calculer le taux d'XP total par seconde
+        _totalXpPerSecond = _xpFromClicks + _xpPerSecondPassive;
+      });
+    });
+  }
+
+  // Initialiser les résonances par défaut si nécessaire
+  Future<void> _initDefaultResonances() async {
+    try {
+      // Vérifier si des résonances existent dans la base de données
+      final allResonances = await _resonanceService.getAllResonances();
+
+      if (allResonances.isEmpty) {
+        // Si aucune résonance n'existe, initialiser les résonances par défaut
+        await _resonanceService.initDefaultResonances();
+
+        // Recharger les résonances
+        _allResonances = await _resonanceService.getAllResonances();
+
+        // Charger les résonances du joueur si un ninja est sélectionné
+        if (_currentNinja != null) {
+          await _loadPlayerResonances();
+        }
+      }
+    } catch (e) {
+      print('Erreur lors de l\'initialisation des résonances: $e');
+    }
+  }
+
+  // Forcer la réinitialisation des résonances dans la base de données
+  Future<void> _reinitializeResonances() async {
+    try {
+      // Réinitialiser les résonances par défaut
+      await _resonanceService.initDefaultResonances();
+
+      // Recharger les résonances
+      await _loadPlayerResonances();
+
+      // Afficher un message de succès
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Résonances réinitialisées avec succès'),
+            backgroundColor: KaiColors.accent,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Erreur lors de la réinitialisation des résonances: $e');
+
+      // Afficher un message d'erreur
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

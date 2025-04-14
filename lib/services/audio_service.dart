@@ -149,21 +149,39 @@ class AudioService {
   // Jouer un son spécifique
   Future<void> playSound(String soundName) async {
     try {
-      // Si le chemin contient déjà 'assets/sounds', ne pas l'ajouter
+      // Le chemin doit être sans "assets/" car AssetSource l'ajoute automatiquement
       String soundPath;
       if (soundName.startsWith('assets/sounds/')) {
-        soundPath = soundName;
+        // Si le chemin complet est fourni, retirer le préfixe "assets/"
+        soundPath = soundName.replaceAll('assets/', '');
       } else if (soundName.startsWith('sounds/')) {
-        soundPath = 'assets/$soundName';
+        // Si le chemin commence par "sounds/", le laisser tel quel
+        soundPath = soundName;
       } else {
-        soundPath = 'assets/sounds/$soundName';
+        // Sinon, ajouter "sounds/" devant le nom du son
+        soundPath = 'sounds/$soundName';
       }
 
-      await effectsPlayer
-          .play(AssetSource(soundPath.replaceAll('assets/', '')));
+      await effectsPlayer.play(AssetSource(soundPath));
       print('Lecture du son: $soundPath');
     } catch (e) {
       print('Erreur lors de la lecture du son $soundName: $e');
+    }
+  }
+
+  // Arrêter tous les sons en même temps
+  Future<void> stopAll() async {
+    try {
+      await stopAmbiance();
+      await stopChakraSound();
+
+      // Arrêter également les autres lecteurs
+      await techniquePlayer.stop();
+      await effectsPlayer.stop();
+
+      print("Tous les sons ont été arrêtés");
+    } catch (e) {
+      print('Erreur lors de l\'arrêt de tous les sons: $e');
     }
   }
 }

@@ -7,13 +7,20 @@ class Technique {
   final int cost;
   final int powerPerSecond;
   final String sound;
-  final String type; // 'special' ou 'auto'
+  final String type; // 'active', 'auto', 'passive', 'simple'
   final String? trigger; // condition pour techniques auto
   final String effect; // 'damage', 'push', 'stun', etc.
   final int chakraCost;
   final int cooldown;
   final String? animation;
   final bool isDefault;
+  final String? affinity; // 'Flux', 'Fracture', 'Sceau', 'Dérive', 'Frappe'
+  final Map<String, dynamic>?
+      effectDetails; // détails supplémentaires sur l'effet
+  final String? conditionGenerated; // condition générée par la technique
+  final bool unlocked; // Si la technique est débloquée dans l'arbre
+  final int techLevel; // Niveau de la technique dans l'arbre
+  final String? parentTechId; // ID de la technique parente dans l'arbre
   int level = 0;
 
   // Propriétés de compatibilité
@@ -39,6 +46,12 @@ class Technique {
     this.animation,
     this.isDefault = false,
     this.level = 0,
+    this.affinity,
+    this.effectDetails,
+    this.conditionGenerated,
+    this.unlocked = false,
+    this.techLevel = 1,
+    this.parentTechId,
   });
 
   // Constructeur de compatibilité pour l'ancien code
@@ -49,7 +62,7 @@ class Technique {
     required int cout,
     required int puissanceParSeconde,
     required String son,
-    String type = 'special',
+    String type = 'active',
     String? trigger,
     String effect = 'damage',
     int chakraCost = 50,
@@ -57,6 +70,12 @@ class Technique {
     String? animation,
     bool isDefault = false,
     int niveau = 0,
+    String? affinity,
+    Map<String, dynamic>? effectDetails,
+    String? conditionGenerated,
+    bool unlocked = false,
+    int techLevel = 1,
+    String? parentTechId,
   }) {
     return Technique(
       id: id,
@@ -73,6 +92,12 @@ class Technique {
       animation: animation,
       isDefault: isDefault,
       level: niveau,
+      affinity: affinity,
+      effectDetails: effectDetails,
+      conditionGenerated: conditionGenerated,
+      unlocked: unlocked,
+      techLevel: techLevel,
+      parentTechId: parentTechId,
     );
   }
 
@@ -94,6 +119,12 @@ class Technique {
       animation: data['animation'],
       isDefault: data['isDefault'] ?? false,
       level: data['level'] ?? 0,
+      affinity: data['affinity'],
+      effectDetails: data['effectDetails'] as Map<String, dynamic>?,
+      conditionGenerated: data['conditionGenerated'],
+      unlocked: data['unlocked'] ?? false,
+      techLevel: data['techLevel'] ?? 1,
+      parentTechId: data['parentTechId'],
     );
   }
 
@@ -113,6 +144,12 @@ class Technique {
       'animation': animation,
       'isDefault': isDefault,
       'level': level,
+      'affinity': affinity,
+      'effectDetails': effectDetails,
+      'conditionGenerated': conditionGenerated,
+      'unlocked': unlocked,
+      'techLevel': techLevel,
+      'parentTechId': parentTechId,
     };
   }
 
@@ -146,6 +183,12 @@ class Technique {
       animation: json['animation'],
       isDefault: json['isDefault'] ?? false,
       level: json['niveau'] ?? json['level'] ?? 0,
+      affinity: json['affinity'],
+      effectDetails: json['effectDetails'] as Map<String, dynamic>?,
+      conditionGenerated: json['conditionGenerated'],
+      unlocked: json['unlocked'] ?? false,
+      techLevel: json['techLevel'] ?? 1,
+      parentTechId: json['parentTechId'],
     );
   }
 }

@@ -4,13 +4,15 @@ import 'package:flutter/material.dart';
 import '../styles/kai_colors.dart';
 
 class ChakraButton extends StatefulWidget {
-  final Function(int bonusXp, double multiplier) onTap;
-  final int puissance; // Valeur d'XP à afficher
+  final Function(int gainXp) onTap;
+  final int puissance; // Valeur du combo à afficher
+  final int totalXP; // Quantité d'XP totale à afficher
 
   const ChakraButton({
     super.key,
     required this.onTap,
     required this.puissance,
+    required this.totalXP,
   });
 
   @override
@@ -42,9 +44,16 @@ class _ChakraButtonState extends State<ChakraButton>
 
   // Gestion du cercle d'énergie
   double _chakraCircleSize = 220;
-  double _maxChakraCircleSize = 300;
+  double _maxChakraCircleSize = 600;
   Color _chakraCircleColor = KaiColors.accent
       .withOpacity(0.4); // Changé à la couleur d'accent pour l'XP
+
+  // Variables pour l'effet de pulsation
+  bool _isPulsating = false;
+  Timer? _pulsationTimer;
+  bool _isPulsatingUp = true;
+  double _pulsationAmount = 20.0; // Amplitude de la pulsation
+  double _basePulsationSize = 0.0; // Taille de base pour la pulsation
 
   // Position du dernier clic
   Offset? _lastTapPosition;
@@ -72,6 +81,7 @@ class _ChakraButtonState extends State<ChakraButton>
     _chakraTimer?.cancel();
     _animationTimer?.cancel();
     _comboResetTimer?.cancel();
+    _pulsationTimer?.cancel();
 
     // Nettoyer toutes les animations de clic
     for (var anim in _clickAnimations) {
@@ -85,76 +95,31 @@ class _ChakraButtonState extends State<ChakraButton>
     _animationController.reset();
     _animationController.forward();
 
-    // Annuler le timer de reset du combo s'il existe
-    _comboResetTimer?.cancel();
+    // Utiliser directement le compteur externe (widget.puissance) au lieu du compteur interne
+    // Cela garantit que l'affichage du combo et le compteur interne sont synchronisés
+    _comboClicks = widget.puissance;
 
     // On considère que c'est la fin du combo si on est au dernier clic avant expiration
     bool isEndOfCombo = false;
 
-    // Créer un nouveau timer pour réinitialiser le combo après 1.5 secondes d'inactivité
-    _comboResetTimer = Timer(const Duration(milliseconds: 1500), () {
-      // Ajouter une animation finale qui montre les gains totaux
-      if (_comboClicks >= 5 && mounted) {
-        setState(() {
-          // Position du dernier clic
-          double offsetX = 0;
-          double offsetY = -30;
-
-          if (_lastTapPosition != null) {
-            offsetX = _lastTapPosition!.dx - 100;
-            offsetY = _lastTapPosition!.dy - 100 - 30;
-          }
-
-          // Calculer les gains finaux
-          int bonusXp = (_comboClicks / 5).floor();
-          double multiplier = 1.0 + (min(_comboClicks, 50) / 50);
-          int gainTotal = (1 * multiplier).floor() + bonusXp;
-
-          // Annuler les animations précédentes
-          for (var anim in _clickAnimations) {
-            anim.timer?.cancel();
-          }
-          _clickAnimations.clear();
-
-          // Ajouter l'animation de fin de combo
-          _clickAnimations.add(ClickAnimation(
-            value: gainTotal,
-            bonusXp: bonusXp,
-            multiplier: multiplier,
-            combo: _comboClicks,
-            offsetX: offsetX,
-            offsetY: offsetY,
-            isEndOfCombo: true,
-            onComplete: () {
-              setState(() {
-                _clickAnimations.removeWhere((anim) => anim.isCompleted);
-                // Réinitialiser le compteur de combo
-                _comboClicks = 0;
-              });
-            },
-          ));
-        });
-      } else if (mounted) {
-        // Réinitialiser simplement le compteur si pas de gains significatifs
-        setState(() {
-          _comboClicks = 0;
-        });
-      }
-    });
-
     setState(() {
       _isChakraMode = true;
-      _comboClicks++;
+      // Ne pas incrémenter _comboClicks ici, c'est fait par le GameScreen
 
-      // Augmenter la taille du cercle d'énergie et changer sa couleur
+      // Augmenter la taille du cercle d'énergie et changer sa couleur en fonction du compteur de combo
       if (_comboClicks > 1) {
         _chakraCircleSize =
-            (_chakraCircleSize + 10).clamp(220, _maxChakraCircleSize);
+            (_chakraCircleSize + 10).clamp(220.0, _maxChakraCircleSize);
 
         // Transition de couleur basée sur _comboClicks
         double intensityFactor = (_comboClicks / 10).clamp(0.0, 1.0);
         _chakraCircleColor = Color.lerp(KaiColors.primaryDark.withOpacity(0.4),
             KaiColors.accent.withOpacity(0.6), intensityFactor)!;
+
+        // Commencer l'effet de pulsation si la taille max est atteinte ou presque
+        if (_chakraCircleSize >= _maxChakraCircleSize - 10 && !_isPulsating) {
+          _startPulsation();
+        }
       }
 
       // Annuler toutes les animations précédentes sauf en fin de combo
@@ -175,27 +140,12 @@ class _ChakraButtonState extends State<ChakraButton>
         offsetY -= 30;
       }
 
-      // Calculer le bonus et le multiplicateur en fonction du combo
-      int bonusXp = 0;
-      double multiplier = 1.0;
+      // Gain XP fixe de 1 par clic
+      int gainXp = 1;
 
-      // À partir de 5 clics, commencer à attribuer des bonus
-      if (_comboClicks >= 5) {
-        // 5 clics = +1 XP, 10 clics = +5 XP, etc.
-        bonusXp = (_comboClicks / 5).floor();
-
-        // Multiplicateur qui augmente de 0.1 tous les 5 clics (max 2.0)
-        multiplier = 1.0 + (min(_comboClicks, 50) / 50);
-      }
-
-      // Gain total = base(1) * multiplicateur + bonus
-      int gainTotal = (1 * multiplier).floor() + bonusXp;
-
-      // Ajouter une nouvelle animation de clic
+      // Ajouter une nouvelle animation de clic avec le compteur de combo actuel
       _clickAnimations.add(ClickAnimation(
-        value: gainTotal,
-        bonusXp: bonusXp,
-        multiplier: multiplier,
+        value: gainXp,
         combo: _comboClicks,
         offsetX: offsetX,
         offsetY: offsetY,
@@ -211,17 +161,8 @@ class _ChakraButtonState extends State<ChakraButton>
       ));
     });
 
-    // Calculer le bonus et le multiplicateur pour le callback
-    int bonusXp = 0;
-    double multiplier = 1.0;
-
-    if (_comboClicks >= 5) {
-      bonusXp = (_comboClicks / 5).floor();
-      multiplier = 1.0 + (min(_comboClicks, 50) / 50);
-    }
-
-    // Appeler le callback avec les valeurs de bonus et de multiplicateur
-    widget.onTap(bonusXp, multiplier);
+    // Appeler le callback avec la valeur de gain (1 XP)
+    widget.onTap(1);
 
     // Démarrer ou réinitialiser l'animation de chakra
     _startChakraAnimation();
@@ -266,11 +207,62 @@ class _ChakraButtonState extends State<ChakraButton>
     });
   }
 
+  // Démarrer l'effet de pulsation
+  void _startPulsation() {
+    // Annuler le timer s'il existe déjà
+    _pulsationTimer?.cancel();
+
+    setState(() {
+      _isPulsating = true;
+      _basePulsationSize = _chakraCircleSize;
+      _isPulsatingUp = true;
+    });
+
+    // Créer un timer pour l'animation de pulsation
+    _pulsationTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+      if (!mounted || !_isPulsating) {
+        timer.cancel();
+        return;
+      }
+
+      setState(() {
+        if (_isPulsatingUp) {
+          // Augmenter la taille
+          _chakraCircleSize += 1.5;
+          if (_chakraCircleSize >= _basePulsationSize + _pulsationAmount) {
+            _isPulsatingUp = false;
+          }
+        } else {
+          // Diminuer la taille
+          _chakraCircleSize -= 1.5;
+          if (_chakraCircleSize <= _basePulsationSize - _pulsationAmount / 2) {
+            _isPulsatingUp = true;
+          }
+        }
+      });
+    });
+  }
+
+  // Arrêter l'effet de pulsation
+  void _stopPulsation() {
+    _pulsationTimer?.cancel();
+    setState(() {
+      _isPulsating = false;
+      _chakraCircleSize =
+          _basePulsationSize > 0 ? _basePulsationSize : _chakraCircleSize;
+    });
+  }
+
   // Démarrer le processus d'animation inverse
   void _startReverseAnimation() {
     // Commencer l'animation inverse
     _animationTimer?.cancel();
     _isAnimatingForward = false;
+
+    // Arrêter la pulsation si elle est active
+    if (_isPulsating) {
+      _stopPulsation();
+    }
 
     // Créer un timer pour l'animation inverse
     _animationTimer = Timer.periodic(const Duration(milliseconds: 70), (timer) {
@@ -351,27 +343,49 @@ class _ChakraButtonState extends State<ChakraButton>
               ),
             ),
 
-            // Image de Naruto avec animation de pulsation
-            ScaleTransition(
-              scale: _scaleAnimation,
-              child: Image.asset(
-                _isChakraMode
-                    ? _chakraAnimationImages[_chakraAnimationStep]
-                    : 'assets/images/naruto_normal.png',
+            // Image du chakra
+            if (_isChakraMode)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 width: 200,
                 height: 200,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  image: DecorationImage(
+                    image: AssetImage(
+                        _chakraAnimationImages[_chakraAnimationStep]),
+                    fit: BoxFit.cover,
+                  ),
+                ),
               ),
-            ),
 
-            // Texte d'XP actuelle
+            // Image du bouton - maintenant conditionnelle
+            if (!_isChakraMode)
+              ScaleTransition(
+                scale: _scaleAnimation,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 180,
+                  height: 180,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    image: DecorationImage(
+                      image: AssetImage('assets/images/naruto_chakra.png'),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              ),
+
+            // Affichage de l'XP total en bas au centre
             Positioned(
               bottom: 30,
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade700, // Couleur bleue pour l'XP
-                  borderRadius: BorderRadius.circular(20),
+                  color: KaiColors.primaryDark.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.3),
@@ -384,32 +398,19 @@ class _ChakraButtonState extends State<ChakraButton>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(
-                      Icons.whatshot, // Icône d'XP
-                      color: Colors.white,
+                      Icons.whatshot, // Icône d'XP (flamme)
+                      color: KaiColors.accent,
                       size: 16,
                     ),
                     const SizedBox(width: 4),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _formatNumber(widget.puissance),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(width: 2),
-                        const Text(
-                          'XP',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      _formatXpForDisplay(
+                          widget.totalXP), // Formater l'XP avec max 4 chiffres
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ],
                 ),
@@ -423,13 +424,28 @@ class _ChakraButtonState extends State<ChakraButton>
       ),
     );
   }
+
+  // Méthode pour formater l'XP avec un maximum de 4 chiffres
+  String _formatXpForDisplay(int xp) {
+    if (xp >= 1000000) {
+      // Pour les millions (M) - Exemple: 1.2M, 10M
+      return '${(xp / 1000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}M';
+    } else if (xp >= 10000) {
+      // Pour les milliers (K) sans décimale - Exemple: 10K, 999K
+      return '${(xp / 1000).floor()}K';
+    } else if (xp >= 1000) {
+      // Pour les petits milliers avec une décimale - Exemple: 1.2K, 9.9K
+      return '${(xp / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}K';
+    } else {
+      // Valeurs inférieures à 1000 - Exemple: 1, 42, 999
+      return xp.toString();
+    }
+  }
 }
 
 // Classe pour gérer les animations de clic "+n"
 class ClickAnimation {
   final int value;
-  final int bonusXp;
-  final double multiplier;
   final int combo;
   final double offsetX;
   final double offsetY;
@@ -441,14 +457,8 @@ class ClickAnimation {
   bool isCompleted = false;
   Timer? timer;
 
-  // Calculer le gain provenant du multiplicateur
-  int get gainFromMultiplier =>
-      (multiplier > 1.0) ? ((1 * multiplier).floor() - 1) : 0;
-
   ClickAnimation({
     required this.value,
-    this.bonusXp = 0,
-    this.multiplier = 1.0,
     this.combo = 1,
     required this.offsetX,
     required this.offsetY,
@@ -457,11 +467,12 @@ class ClickAnimation {
   }) {
     // Démarrer l'animation
     timer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
-      progress += 0.016; // Environ 60 FPS
+      progress +=
+          0.048; // Doublé par rapport à 0.024 pour une animation 2x plus rapide
 
-      // Commencer à disparaître à 70% de l'animation
-      if (progress > 0.7) {
-        opacity = max(0, 1 - ((progress - 0.7) / 0.3));
+      // Commencer à disparaître plus tôt (à 35% au lieu de 40%)
+      if (progress > 0.35) {
+        opacity = max(0, 1 - ((progress - 0.35) / 0.3));
       }
 
       // Animation terminée
@@ -479,113 +490,48 @@ class ClickAnimation {
       top: 100 + offsetY,
       child: AnimatedOpacity(
         opacity: opacity,
-        duration: const Duration(milliseconds: 50),
+        duration: const Duration(
+            milliseconds: 15), // Réduit à 15ms pour être deux fois plus rapide
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          transform: Matrix4.translationValues(0, -progress * 40, 0),
+          duration: const Duration(
+              milliseconds: 75), // Réduit à 75ms au lieu de 150ms
+          transform: Matrix4.translationValues(0, -progress * 50,
+              0), // Augmenté à 50 pour un mouvement plus rapide
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Afficher le nombre de clics en grand
+              // Afficher le nombre de combo actuel
               Text(
-                '$combo',
+                '+$combo',
                 style: TextStyle(
-                  fontSize: 36,
+                  fontSize:
+                      40, // Légèrement plus grand pour compenser la vitesse
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                   shadows: [
                     Shadow(
-                      color: Colors.blue.shade800,
+                      color: KaiColors.primaryDark,
                       blurRadius: 2,
                       offset: const Offset(1.5, 1.5),
                     ),
                     Shadow(
-                      color: Colors.blue.shade800,
+                      color: KaiColors.primaryDark,
                       blurRadius: 2,
                       offset: const Offset(-1.5, -1.5),
                     ),
                     Shadow(
-                      color: Colors.blue.shade800,
+                      color: KaiColors.primaryDark,
                       blurRadius: 2,
                       offset: const Offset(1.5, -1.5),
                     ),
                     Shadow(
-                      color: Colors.blue.shade800,
+                      color: KaiColors.primaryDark,
                       blurRadius: 2,
                       offset: const Offset(-1.5, 1.5),
                     ),
                   ],
                 ),
               ),
-
-              // Montrer le multiplicateur si combo >= 5
-              if (combo >= 5)
-                Text(
-                  'x${multiplier.toStringAsFixed(1)}',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.amber.shade300,
-                    shadows: [
-                      Shadow(
-                        color: Colors.blue.shade900,
-                        blurRadius: 2,
-                        offset: const Offset(1, 1),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // Si on est en fin d'animation et qu'il y a des bonus, les afficher
-              if (isEndOfCombo && combo >= 5)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Gain lié au multiplicateur
-                      Text(
-                        '+${gainFromMultiplier}',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green.shade300,
-                          shadows: [
-                            Shadow(
-                              color: Colors.blue.shade900,
-                              blurRadius: 2,
-                              offset: const Offset(1, 1),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Bonus lié au combo si présent
-                      if (bonusXp > 0)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(width: 10),
-                            Text(
-                              '+${bonusXp}',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.purple.shade300,
-                                shadows: [
-                                  Shadow(
-                                    color: Colors.blue.shade900,
-                                    blurRadius: 2,
-                                    offset: const Offset(1, 1),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                ),
             ],
           ),
         ),

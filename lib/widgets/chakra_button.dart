@@ -404,8 +404,8 @@ class _ChakraButtonState extends State<ChakraButton>
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      _formatXpForDisplay(
-                          widget.totalXP), // Formater l'XP avec max 4 chiffres
+                      _formatXpForDisplay(widget.totalXP) +
+                          ' XP', // Formater l'XP avec max 4 chiffres
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -428,14 +428,25 @@ class _ChakraButtonState extends State<ChakraButton>
   // Méthode pour formater l'XP avec un maximum de 4 chiffres
   String _formatXpForDisplay(int xp) {
     if (xp >= 1000000) {
-      // Pour les millions (M) - Exemple: 1.2M, 10M
-      return '${(xp / 1000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}M';
-    } else if (xp >= 10000) {
-      // Pour les milliers (K) sans décimale - Exemple: 10K, 999K
-      return '${(xp / 1000).floor()}K';
+      // Pour les millions (M) - Exemple: 1.156M au lieu de 1.1M
+      double value = xp / 1000000;
+      if (value >= 10) {
+        // Pour 10M et plus, afficher deux chiffres significatifs
+        return '${value.toStringAsFixed(2).replaceAll(RegExp(r'\.0+$'), '')}M';
+      } else {
+        // Pour 1M à 9.999M, afficher trois décimales
+        return '${value.toStringAsFixed(3).replaceAll(RegExp(r'\.0+$'), '')}M';
+      }
     } else if (xp >= 1000) {
-      // Pour les petits milliers avec une décimale - Exemple: 1.2K, 9.9K
-      return '${(xp / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}K';
+      // Pour les milliers (K) - Exemple: 1.156K au lieu de 1.1K
+      double value = xp / 1000;
+      if (value >= 10) {
+        // Pour 10K et plus, afficher deux chiffres significatifs
+        return '${value.toStringAsFixed(2).replaceAll(RegExp(r'\.0+$'), '')}K';
+      } else {
+        // Pour 1K à 9.999K, afficher trois décimales
+        return '${value.toStringAsFixed(3).replaceAll(RegExp(r'\.0+$'), '')}K';
+      }
     } else {
       // Valeurs inférieures à 1000 - Exemple: 1, 42, 999
       return xp.toString();

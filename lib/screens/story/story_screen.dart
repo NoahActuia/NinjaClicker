@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/mission.dart';
 import '../../models/technique.dart';
 import '../../services/mission_service.dart';
+import '../../styles/kai_colors.dart';
 import 'mission_detail_screen.dart';
 
 class StoryScreen extends StatefulWidget {
@@ -96,28 +97,42 @@ class _StoryScreenState extends State<StoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: KaiColors.background,
       appBar: AppBar(
         title: const Text(
           'Mode Histoire',
           style: TextStyle(
-            color: Colors.white,
+            color: KaiColors.textPrimary,
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: Colors.orange[700],
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: KaiColors.primaryDark,
+        iconTheme: const IconThemeData(color: KaiColors.accent),
+        elevation: 0,
       ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              KaiColors.primaryDark,
+              KaiColors.background,
+            ],
+          ),
           image: DecorationImage(
-            image: AssetImage('assets/images/background.webp'),
+            image: const AssetImage('assets/images/background.webp'),
             fit: BoxFit.cover,
-            opacity: 0.6,
+            opacity: 0.3,
+            colorFilter: ColorFilter.mode(
+              KaiColors.accent.withOpacity(0.1),
+              BlendMode.overlay,
+            ),
           ),
         ),
         child: _isLoading
             ? const Center(
-                child: CircularProgressIndicator(color: Colors.orange),
+                child: CircularProgressIndicator(color: KaiColors.accent),
               )
             : ListView.builder(
                 padding: const EdgeInsets.all(16),
@@ -134,9 +149,24 @@ class _StoryScreenState extends State<StoryScreen> {
                   return Card(
                     margin: const EdgeInsets.only(bottom: 16),
                     clipBehavior: Clip.antiAlias,
+                    color: KaiColors.cardBackground,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: mission.completed
+                            ? KaiColors.success.withOpacity(0.5)
+                            : isAvailable && isPreviousCompleted
+                                ? KaiColors.accent.withOpacity(0.5)
+                                : Colors.transparent,
+                        width: 1.5,
+                      ),
                     ),
+                    elevation: 4,
+                    shadowColor: mission.completed
+                        ? KaiColors.success.withOpacity(0.3)
+                        : isAvailable && isPreviousCompleted
+                            ? KaiColors.accent.withOpacity(0.3)
+                            : Colors.black.withOpacity(0.2),
                     child: InkWell(
                       onTap: (isAvailable &&
                               isPreviousCompleted &&
@@ -168,12 +198,12 @@ class _StoryScreenState extends State<StoryScreen> {
                               ),
                               Container(
                                 width: double.infinity,
-                                color: Colors.black.withOpacity(0.6),
+                                color: KaiColors.primaryDark.withOpacity(0.8),
                                 padding: const EdgeInsets.all(8),
                                 child: Text(
                                   mission.titre,
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: KaiColors.textPrimary,
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -187,7 +217,7 @@ class _StoryScreenState extends State<StoryScreen> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
-                                      color: Colors.green,
+                                      color: KaiColors.success,
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: const Text(

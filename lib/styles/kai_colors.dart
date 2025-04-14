@@ -17,4 +17,11 @@ class KaiColors {
   // Couleurs spécifiques
   static const Color error = Colors.red;
   static const Color success = Colors.green;
+
+  // Couleurs des affinités
+  static const Color fluxColor = Colors.lightBlue;
+  static const Color fractureColor = Colors.deepPurple;
+  static const Color sealColor = Colors.amber;
+  static const Color driftColor = Colors.teal;
+  static const Color strikeColor = Colors.redAccent;
 }

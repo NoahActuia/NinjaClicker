@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/ninja.dart';
 import '../services/ninja_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../styles/kai_colors.dart';
 
 class RankingScreen extends StatefulWidget {
   const RankingScreen({Key? key}) : super(key: key);
@@ -67,23 +68,31 @@ class _RankingScreenState extends State<RankingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: KaiColors.background,
       appBar: AppBar(
-        title: const Text('Classement des Ninjas'),
+        title: const Text(
+          'Classement des Fracturés',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: KaiColors.textPrimary,
+          ),
+        ),
+        backgroundColor: KaiColors.primaryDark,
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.deepOrange.shade800,
-                Colors.orange.shade700,
+                KaiColors.primaryDark,
+                KaiColors.accent.withOpacity(0.2),
               ],
             ),
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: KaiColors.accent),
             onPressed: _loadRanking,
             tooltip: 'Actualiser',
           ),
@@ -94,7 +103,11 @@ class _RankingScreenState extends State<RankingScreen> {
           _buildFilterBar(),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: KaiColors.accent,
+                    ),
+                  )
                 : _buildRankingList(),
           ),
         ],
@@ -106,10 +119,10 @@ class _RankingScreenState extends State<RankingScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: KaiColors.primaryDark,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: KaiColors.accent.withOpacity(0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -121,6 +134,7 @@ class _RankingScreenState extends State<RankingScreen> {
             'Trier par:',
             style: TextStyle(
               fontWeight: FontWeight.bold,
+              color: KaiColors.textSecondary,
             ),
           ),
           const SizedBox(width: 12),
@@ -138,9 +152,9 @@ class _RankingScreenState extends State<RankingScreen> {
           const Spacer(),
           if (!_isLoading && _rankedNinjas.isNotEmpty)
             Text(
-              '${_rankedNinjas.length} ninjas',
-              style: TextStyle(
-                color: Colors.grey.shade600,
+              '${_rankedNinjas.length} fracturés',
+              style: const TextStyle(
+                color: KaiColors.textSecondary,
                 fontSize: 12,
               ),
             ),
@@ -164,10 +178,15 @@ class _RankingScreenState extends State<RankingScreen> {
           Icon(
             icon,
             size: 16,
-            color: isSelected ? Colors.white : Colors.grey.shade700,
+            color: isSelected ? Colors.white : KaiColors.textSecondary,
           ),
           const SizedBox(width: 4),
-          Text(label),
+          Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.white : KaiColors.textSecondary,
+            ),
+          ),
         ],
       ),
       onSelected: (selected) {
@@ -195,11 +214,11 @@ class _RankingScreenState extends State<RankingScreen> {
           });
         }
       },
-      backgroundColor: Colors.grey.shade200,
-      selectedColor: Colors.deepOrange.shade600,
+      backgroundColor: KaiColors.cardBackground,
+      selectedColor: KaiColors.accent,
       checkmarkColor: Colors.white,
       labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.grey.shade700,
+        color: isSelected ? Colors.white : KaiColors.textSecondary,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

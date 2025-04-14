@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/technique.dart';
+import '../models/ninja_technique.dart';
+import '../models/ninja.dart';
+import '../services/ninja_service.dart';
+import '../services/technique_service.dart';
 import '../styles/kai_colors.dart';
 
 class TechniqueTreeScreen extends StatefulWidget {
@@ -14,6 +18,8 @@ class TechniqueTreeScreen extends StatefulWidget {
 class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _userId = FirebaseAuth.instance.currentUser?.uid ?? '';
+  final TechniqueService _techniqueService = TechniqueService();
+  final NinjaService _ninjaService = NinjaService();
 
   // Filtres des techniques par affinité
   String _selectedAffinity = 'Tous';
@@ -29,25 +35,57 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
   // Techniques regroupées par niveau
   Map<int, List<Technique>> _techniquesByLevel = {};
   bool _isLoading = true;
-  int _playerPuissance = 0;
+  int _playerXp = 0;
+  String _ninjaId = '';
+  String _ninjaName = '';
 
   @override
   void initState() {
     super.initState();
-    _loadTechniques();
-    _loadPlayerData();
+    _initialize();
   }
 
-  Future<void> _loadPlayerData() async {
+  Future<void> _initialize() async {
+    await _getCurrentNinja();
+    await _loadTechniques();
+  }
+
+  // Récupérer le ninja actuel
+  Future<void> _getCurrentNinja() async {
     try {
-      final doc = await _firestore.collection('users').doc(_userId).get();
-      if (doc.exists) {
-        setState(() {
-          _playerPuissance = doc.data()?['puissance'] ?? 0;
-        });
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('Utilisateur non authentifié');
       }
+
+      // Récupérer les ninjas de l'utilisateur avec NinjaService
+      final ninjas = await _ninjaService.getNinjasByUser(user.uid);
+
+      if (ninjas.isEmpty) {
+        throw Exception('Aucun personnage trouvé pour l\'utilisateur');
+      }
+
+      // Trier les ninjas par date de dernière connexion (du plus récent au moins récent)
+      ninjas.sort((a, b) => b.lastConnected.compareTo(a.lastConnected));
+
+      // Utiliser le ninja le plus récemment connecté
+      final currentNinja = ninjas.first;
+
+      print(
+          'Ninja sélectionné: ${currentNinja.name} (dernière connexion: ${currentNinja.lastConnected})');
+
+      setState(() {
+        _ninjaId = currentNinja.id;
+        _ninjaName = currentNinja.name;
+        _playerXp = currentNinja.xp;
+      });
     } catch (e) {
-      print('Erreur lors du chargement des données joueur: $e');
+      print('Erreur lors de la récupération du ninja: $e');
+      setState(() {
+        _ninjaId = '';
+        _ninjaName = 'Fracturé inconnu';
+        _playerXp = 0;
+      });
     }
   }
 
@@ -57,9 +95,17 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
     });
 
     try {
+      // Vérifier que nous avons un ID de ninja valide
+      if (_ninjaId.isEmpty) {
+        print('Aucun ninja actif trouvé, impossible de charger les techniques');
+        // Charger les techniques par défaut à la place
+        await _loadDefaultTechniques();
+        return;
+      }
+
       final querySnapshot = await _firestore.collection('techniques').get();
 
-      // Récupération des techniques débloquées par le joueur
+      // Récupérer les techniques débloquées par l'utilisateur
       final userTechniquesDoc = await _firestore
           .collection('users')
           .doc(_userId)
@@ -74,15 +120,22 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
         unlockedTechniques[techId] = isUnlocked;
       }
 
+      // Récupérer les techniques associées au ninja via la table pivot
+      final ninjaTechniques =
+          await _techniqueService.getNinjaTechniques(_ninjaId);
+
+      // Set des IDs de techniques déjà associées au ninja
+      final Set<String> ninjaTechniqueIds =
+          ninjaTechniques.map((nt) => nt.techniqueId).toSet();
+
       // Organisation des techniques par niveau
       final Map<int, List<Technique>> techniquesByLevel = {};
 
       for (var doc in querySnapshot.docs) {
         final technique = Technique.fromFirestore(doc);
 
-        // Mise à jour du statut de débloquage basé sur les données utilisateur
-        final bool isUnlocked =
-            unlockedTechniques[technique.id] ?? technique.unlocked;
+        // Mise à jour du statut de débloquage basé sur la table pivot
+        final bool isUnlocked = ninjaTechniqueIds.contains(technique.id);
 
         // Créer une copie avec le statut de débloquage mis à jour
         final updatedTechnique = Technique(
@@ -121,7 +174,35 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
       });
     } catch (e) {
       print('Erreur lors du chargement des techniques: $e');
+
+      // En cas d'erreur, charger les techniques par défaut
+      _loadDefaultTechniques();
+    }
+  }
+
+  // Méthode de secours pour charger les techniques par défaut
+  Future<void> _loadDefaultTechniques() async {
+    try {
+      final defaultTechniques = await _techniqueService.getDefaultTechniques();
+
+      final Map<int, List<Technique>> techniquesByLevel = {};
+
+      for (var technique in defaultTechniques) {
+        // Ajouter à la map par niveau
+        if (!techniquesByLevel.containsKey(technique.techLevel)) {
+          techniquesByLevel[technique.techLevel] = [];
+        }
+        techniquesByLevel[technique.techLevel]?.add(technique);
+      }
+
       setState(() {
+        _techniquesByLevel = techniquesByLevel;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Erreur lors du chargement des techniques par défaut: $e');
+      setState(() {
+        _techniquesByLevel = {};
         _isLoading = false;
       });
     }
@@ -129,19 +210,28 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
 
   Future<void> _unlockTechnique(Technique technique) async {
     try {
-      // Vérifier si le joueur a assez de puissance
-      if (_playerPuissance < technique.cost) {
+      // Vérifier si le joueur a assez d'XP
+      if (_playerXp < technique.cost) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-                Text('Puissance insuffisante pour débloquer cette technique'),
+            content: Text(
+                'XP insuffisante pour débloquer cette technique (${technique.cost} XP nécessaires)'),
             backgroundColor: KaiColors.error,
           ),
         );
         return;
       }
 
-      // Mettre à jour la technique pour le joueur
+      if (_ninjaId.isEmpty) {
+        throw Exception('Aucun ninja actif trouvé');
+      }
+
+      // 1. Déduire l'XP du ninja en utilisant ninjaId correctement
+      await _firestore.collection('ninjas').doc(_ninjaId).update({
+        'xp': FieldValue.increment(-technique.cost),
+      });
+
+      // 2. Marquer la technique comme débloquée pour l'utilisateur
       await _firestore
           .collection('users')
           .doc(_userId)
@@ -149,17 +239,15 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
           .doc(technique.id)
           .set({
         'unlocked': true,
-        'level': 1,
+        'unlockedAt': FieldValue.serverTimestamp(),
       });
 
-      // Déduire le coût de puissance
-      await _firestore.collection('users').doc(_userId).update({
-        'puissance': FieldValue.increment(-technique.cost),
-      });
+      // 3. Créer la relation dans la table pivot ninjaTechniques
+      await _techniqueService.addTechniqueToNinja(_ninjaId, technique.id);
 
-      // Rafraîchir les données
+      // 4. Rafraîchir les données
+      await _getCurrentNinja();
       await _loadTechniques();
-      await _loadPlayerData();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -183,9 +271,22 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
     return Scaffold(
       backgroundColor: KaiColors.background,
       appBar: AppBar(
-        title: const Text(
-          'Arbre des Techniques',
-          style: TextStyle(color: KaiColors.textPrimary),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Arbre des Techniques',
+              style: TextStyle(color: KaiColors.textPrimary),
+            ),
+            Text(
+              'Fracturé: $_ninjaName',
+              style: TextStyle(
+                color: KaiColors.accent,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
         backgroundColor: KaiColors.primaryDark,
         iconTheme: IconThemeData(color: KaiColors.textPrimary),
@@ -243,7 +344,7 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
             )
           : Column(
               children: [
-                // Puissance disponible
+                // XP disponible
                 Container(
                   padding: EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -268,7 +369,7 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Puissance disponible:',
+                        'XP disponible:',
                         style: TextStyle(
                           color: KaiColors.textPrimary,
                           fontWeight: FontWeight.bold,
@@ -289,7 +390,7 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
                           ],
                         ),
                         child: Text(
-                          '$_playerPuissance',
+                          '$_playerXp',
                           style: TextStyle(
                             color: KaiColors.accent,
                             fontWeight: FontWeight.bold,
@@ -403,8 +504,7 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
                                                 t.id == technique.parentTechId)
                                             .any((t) => t.unlocked));
 
-                                return _buildTechniqueCard(
-                                    technique, canUnlock);
+                                return _buildTechniqueCard(technique, level);
                               },
                             ),
                             SizedBox(height: 16),
@@ -419,203 +519,186 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
     );
   }
 
-  Widget _buildTechniqueCard(Technique technique, bool canUnlock) {
-    // Déterminer la couleur en fonction de l'affinité
+  Widget _buildTechniqueCard(Technique technique, int level) {
+    // Couleur basée sur l'affinité
     Color affinityColor;
     switch (technique.affinity) {
       case 'Flux':
-        affinityColor = Colors.lightBlue;
+        affinityColor = KaiColors.fluxColor;
         break;
       case 'Fracture':
-        affinityColor = Colors.deepPurple;
+        affinityColor = KaiColors.fractureColor;
         break;
       case 'Sceau':
-        affinityColor = Colors.amber;
+        affinityColor = KaiColors.sealColor;
         break;
       case 'Dérive':
-        affinityColor = Colors.teal;
+        affinityColor = KaiColors.driftColor;
         break;
       case 'Frappe':
-        affinityColor = Colors.redAccent;
+        affinityColor = KaiColors.strikeColor;
         break;
       default:
-        affinityColor = KaiColors.accent;
-    }
-
-    // Icône en fonction du type de technique
-    IconData typeIcon;
-    switch (technique.type) {
-      case 'active':
-        typeIcon = Icons.flash_on;
-        break;
-      case 'auto':
-        typeIcon = Icons.autorenew;
-        break;
-      case 'passive':
-        typeIcon = Icons.shield;
-        break;
-      case 'simple':
-        typeIcon = Icons.accessibility_new;
-        break;
-      default:
-        typeIcon = Icons.help_outline;
+        affinityColor = KaiColors.textSecondary;
     }
 
     return Card(
-      elevation: 8,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: technique.unlocked ? affinityColor : Colors.grey[700]!,
-          width: 2,
+          color: technique.unlocked
+              ? affinityColor.withOpacity(0.7)
+              : Colors.transparent,
+          width: 1.5,
         ),
       ),
+      elevation: 8,
       color: KaiColors.cardBackground,
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {
-          _showTechniqueDetails(technique, canUnlock);
-        },
+        onTap: () => _showTechniqueDetails(technique),
         child: Container(
-          padding: EdgeInsets.all(12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: technique.unlocked
                   ? [
+                      affinityColor.withOpacity(0.2),
                       KaiColors.cardBackground,
-                      affinityColor.withOpacity(0.15),
                     ]
                   : [
                       KaiColors.cardBackground,
-                      KaiColors.cardBackground.withOpacity(0.8),
+                      KaiColors.cardBackground,
                     ],
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Stack(
             children: [
-              // Afficher type et affinité
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: affinityColor.withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 2,
-                          offset: Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      technique.affinity ?? 'Neutre',
-                      style: TextStyle(
-                        color: KaiColors.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: technique.unlocked
-                          ? affinityColor.withOpacity(0.2)
-                          : KaiColors.cardBackground.withOpacity(0.5),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      typeIcon,
-                      color:
-                          technique.unlocked ? affinityColor : Colors.grey[600],
-                      size: 18,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 12),
-              // Nom de la technique
-              Text(
-                technique.name,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: technique.unlocked
-                      ? KaiColors.textPrimary
-                      : KaiColors.textSecondary,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: 8),
-              // Description courte
-              Expanded(
-                child: Text(
-                  technique.description,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: technique.unlocked
-                        ? KaiColors.textSecondary
-                        : Colors.grey[600],
-                  ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              // Coût et statut
-              Container(
-                padding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                decoration: BoxDecoration(
-                  color: KaiColors.primaryDark.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // Contenu de la carte
+              Padding(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Nom et icône d'affinité
                     Row(
                       children: [
-                        Icon(
-                          Icons.bolt,
-                          color: _playerPuissance >= technique.cost
-                              ? KaiColors.accent
-                              : Colors.grey[600],
-                          size: 14,
+                        Expanded(
+                          child: Text(
+                            technique.name,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: technique.unlocked
+                                  ? KaiColors.textPrimary
+                                  : KaiColors.textSecondary,
+                            ),
+                          ),
                         ),
-                        SizedBox(width: 4),
-                        Text(
-                          '${technique.cost}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: _playerPuissance >= technique.cost
-                                ? KaiColors.accent
-                                : Colors.grey[600],
-                            fontSize: 14,
+                        Container(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: affinityColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: affinityColor.withOpacity(0.5),
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            technique.affinity ?? 'Neutre',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: affinityColor,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    Icon(
-                      technique.unlocked
-                          ? Icons.check_circle
-                          : canUnlock
-                              ? Icons.lock_open
-                              : Icons.lock,
-                      color: technique.unlocked
-                          ? KaiColors.success
-                          : canUnlock
-                              ? KaiColors.accent
-                              : Colors.grey[600],
-                      size: 18,
+                    SizedBox(height: 8),
+                    // Description
+                    Text(
+                      technique.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: technique.unlocked
+                            ? KaiColors.textSecondary
+                            : KaiColors.textSecondary.withOpacity(0.7),
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    Spacer(),
+                    // Puissance
+                    Text(
+                      _techniqueService.getFormattedPower(technique),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: technique.unlocked
+                            ? KaiColors.accent
+                            : KaiColors.textSecondary,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    // Coût et niveau
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _techniqueService.getFormattedCost(technique),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: technique.unlocked
+                                ? KaiColors.textSecondary
+                                : KaiColors.textSecondary.withOpacity(0.7),
+                          ),
+                        ),
+                        if (technique.unlocked)
+                          Text(
+                            _techniqueService.getFormattedLevel(technique),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: KaiColors.accent,
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
               ),
+              // Indicateur de technique verrouillée
+              if (!technique.unlocked)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black54,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.lock,
+                            color: KaiColors.textSecondary.withOpacity(0.7),
+                            size: 32,
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'XP Requis: ${technique.cost}',
+                            style: TextStyle(
+                              color: KaiColors.textSecondary.withOpacity(0.9),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -623,78 +706,65 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
     );
   }
 
-  void _showTechniqueDetails(Technique technique, bool canUnlock) {
-    // Déterminer la couleur en fonction de l'affinité
-    Color affinityColor;
-    switch (technique.affinity) {
-      case 'Flux':
-        affinityColor = Colors.lightBlue;
-        break;
-      case 'Fracture':
-        affinityColor = Colors.deepPurple;
-        break;
-      case 'Sceau':
-        affinityColor = Colors.amber;
-        break;
-      case 'Dérive':
-        affinityColor = Colors.teal;
-        break;
-      case 'Frappe':
-        affinityColor = Colors.redAccent;
-        break;
-      default:
-        affinityColor = KaiColors.accent;
+  Future<void> _showTechniqueDetails(Technique technique) async {
+    // Récupérer le niveau actuel de la technique pour ce ninja (si déjà débloquée)
+    int techLevel = 1;
+    NinjaTechnique? ninjaTechnique;
+
+    if (technique.unlocked) {
+      final relations = await _techniqueService.getNinjaTechniquesForTechnique(
+          _ninjaId, technique.id);
+      if (relations.isNotEmpty) {
+        ninjaTechnique = relations.first;
+        techLevel = ninjaTechnique.level;
+      }
     }
+
+    // Calculer le coût d'amélioration (augmente de 50% à chaque niveau)
+    int upgradeCost = (technique.cost * 0.5 * techLevel).round();
+
+    // Calculer les statistiques en fonction du niveau
+    double powerMultiplier = 1.0 + (0.25 * (techLevel - 1));
+    int currentPower = (technique.powerPerSecond * powerMultiplier).round();
+    int nextLevelPower =
+        (technique.powerPerSecond * (powerMultiplier + 0.25)).round();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        decoration: BoxDecoration(
-          color: KaiColors.cardBackground,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              KaiColors.primaryDark,
-              KaiColors.cardBackground,
-            ],
-          ),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.5),
-              blurRadius: 10,
-              offset: Offset(0, -5),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            // Cercle décoratif
-            Positioned(
-              top: -40,
-              right: -40,
-              child: Container(
-                width: 150,
-                height: 150,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: affinityColor.withOpacity(0.1),
-                ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.75,
+            decoration: BoxDecoration(
+              color: KaiColors.primaryDark,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
               ),
             ),
-            // Contenu
-            Padding(
-              padding: EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // En-tête avec nom et affinité
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // En-tête avec le nom de la technique
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        KaiColors.primaryDark,
+                        KaiColors.accent.withOpacity(0.3),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
                     children: [
                       Expanded(
                         child: Column(
@@ -703,96 +773,86 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
                             Text(
                               technique.name,
                               style: TextStyle(
-                                fontSize: 24,
+                                fontSize: 22,
                                 fontWeight: FontWeight.bold,
                                 color: KaiColors.textPrimary,
-                                shadows: [
-                                  Shadow(
-                                    color: affinityColor.withOpacity(0.5),
-                                    blurRadius: 5,
-                                    offset: Offset(0, 2),
-                                  ),
-                                ],
                               ),
                             ),
+                            SizedBox(height: 4),
                             Text(
-                              'Affinité: ${technique.affinity ?? "Neutre"}',
+                              technique.affinity ?? 'Neutre',
                               style: TextStyle(
-                                fontSize: 16,
-                                color: affinityColor,
+                                fontSize: 14,
+                                color: KaiColors.accent,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      Container(
-                        padding: EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: technique.unlocked
-                              ? KaiColors.success
-                              : Colors.grey[700],
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 4,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          technique.unlocked ? Icons.check : Icons.lock,
-                          color: KaiColors.textPrimary,
-                          size: 20,
-                        ),
+                      IconButton(
+                        icon: Icon(Icons.close, color: KaiColors.textPrimary),
+                        onPressed: () => Navigator.pop(context),
                       ),
                     ],
                   ),
-                  SizedBox(height: 20),
-                  // Type et coût
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _buildDetailChip('Type: ${technique.type}',
-                          Icons.category, affinityColor),
-                      _buildDetailChip('Coût: ${technique.cost}',
-                          Icons.monetization_on, affinityColor),
-                      _buildDetailChip('Kai: ${technique.chakraCost}',
-                          Icons.water_drop, affinityColor),
-                      _buildDetailChip('CD: ${technique.cooldown}',
-                          Icons.timelapse, affinityColor),
-                      if (technique.conditionGenerated != null)
-                        _buildDetailChip(
-                            'Génère: ${technique.conditionGenerated}',
-                            Icons.add_circle_outline,
-                            affinityColor),
-                      if (technique.type == 'auto' && technique.trigger != null)
-                        _buildDetailChip('Si: ${technique.trigger}', Icons.bolt,
-                            affinityColor),
-                    ],
-                  ),
-                  SizedBox(height: 20),
-                  // Description complète
-                  Container(
+                ),
+                // Contenu principal
+                Expanded(
+                  child: SingleChildScrollView(
                     padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: KaiColors.primaryDark.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: affinityColor.withOpacity(0.3),
-                        width: 1,
-                      ),
-                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Status de débloquage
+                        Container(
+                          padding: EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: technique.unlocked
+                                ? KaiColors.success.withOpacity(0.1)
+                                : KaiColors.cardBackground,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: technique.unlocked
+                                  ? KaiColors.success.withOpacity(0.5)
+                                  : KaiColors.accent.withOpacity(0.3),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                technique.unlocked
+                                    ? Icons.check_circle
+                                    : Icons.lock,
+                                color: technique.unlocked
+                                    ? KaiColors.success
+                                    : KaiColors.accent,
+                              ),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  technique.unlocked
+                                      ? 'Technique débloquée (Niveau $techLevel)'
+                                      : 'Technique verrouillée',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: technique.unlocked
+                                        ? KaiColors.success
+                                        : KaiColors.accent,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: 16),
+                        // Description
                         Text(
                           'Description',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: KaiColors.accent,
+                            color: KaiColors.textPrimary,
                           ),
                         ),
                         SizedBox(height: 8),
@@ -800,175 +860,240 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
                           technique.description,
                           style: TextStyle(
                             fontSize: 16,
+                            color: KaiColors.textSecondary,
+                          ),
+                        ),
+                        SizedBox(height: 24),
+                        // Statistiques
+                        Text(
+                          'Statistiques',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                             color: KaiColors.textPrimary,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  // Détails de l'effet
-                  if (technique.effectDetails != null) ...[
-                    Container(
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: KaiColors.primaryDark.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: affinityColor.withOpacity(0.3),
-                          width: 1,
+                        SizedBox(height: 12),
+                        // Grille de statistiques
+                        GridView.count(
+                          crossAxisCount: 2,
+                          childAspectRatio: 2.5,
+                          shrinkWrap: true,
+                          physics: NeverScrollableScrollPhysics(),
+                          children: [
+                            _buildStatItem(
+                                'Type', technique.type.toUpperCase()),
+                            _buildStatItem(
+                                'Coût Kai', '${technique.chakraCost}'),
+                            _buildStatItem('Puissance', '$currentPower'),
+                            _buildStatItem(
+                                'Temps de recharge', '${technique.cooldown}s'),
+                            if (technique.type == 'auto' &&
+                                technique.trigger != null)
+                              _buildStatItem('Déclencheur', technique.trigger!),
+                            if (technique.conditionGenerated != null)
+                              _buildStatItem(
+                                  'Génère', technique.conditionGenerated!),
+                          ],
                         ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+
+                        // Niveau et progression
+                        if (technique.unlocked) ...[
+                          SizedBox(height: 24),
                           Text(
-                            'Détails de l\'effet',
+                            'Niveau et Amélioration',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: KaiColors.accent,
+                              color: KaiColors.textPrimary,
                             ),
                           ),
-                          SizedBox(height: 8),
-                          ...technique.effectDetails!.entries.map((entry) {
-                            return Padding(
-                              padding: EdgeInsets.symmetric(vertical: 4),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.arrow_right,
-                                    color: affinityColor,
-                                    size: 20,
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    '${entry.key}: ${entry.value}',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: KaiColors.textPrimary,
+                          SizedBox(height: 12),
+                          // Niveau actuel
+                          Container(
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: KaiColors.cardBackground,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Niveau actuel: $techLevel',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: KaiColors.textPrimary,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Prochain: ${techLevel + 1}',
+                                      style: TextStyle(
+                                        color: KaiColors.accent,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 16),
+                                // Comparaison des statistiques
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            'Puissance',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: KaiColors.textSecondary,
+                                            ),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Text(
+                                            '$currentPower',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: KaiColors.textPrimary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.arrow_forward,
+                                      color: KaiColors.accent,
+                                    ),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            'Prochaine',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: KaiColors.textSecondary,
+                                            ),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Text(
+                                            '$nextLevelPower',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: KaiColors.accent,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 16),
+                                // Bouton d'amélioration
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    onPressed: _playerXp >= upgradeCost
+                                        ? () => _upgradeTechnique(
+                                            technique, techLevel, upgradeCost)
+                                        : null,
+                                    icon: Icon(Icons.upgrade),
+                                    label: Text(
+                                      _playerXp >= upgradeCost
+                                          ? 'Améliorer ($upgradeCost XP)'
+                                          : 'XP insuffisante (${_playerXp}/$upgradeCost)',
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: KaiColors.accent,
+                                      foregroundColor: KaiColors.primaryDark,
+                                      disabledBackgroundColor: Colors.grey,
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 12),
                                     ),
                                   ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: 20),
-                  ],
-                  Spacer(),
-                  // Bouton de débloquage
-                  if (!technique.unlocked && canUnlock) ...[
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _playerPuissance >= technique.cost
-                            ? () {
-                                Navigator.pop(context);
-                                _unlockTechnique(technique);
-                              }
-                            : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: affinityColor,
-                          foregroundColor: KaiColors.textPrimary,
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          shadowColor: affinityColor.withOpacity(0.5),
-                          elevation: 8,
-                          disabledBackgroundColor: Colors.grey[700],
-                          disabledForegroundColor: Colors.grey[400],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.bolt),
-                            SizedBox(width: 8),
-                            Text(
-                              _playerPuissance >= technique.cost
-                                  ? 'Débloquer (${technique.cost} puissance)'
-                                  : 'Puissance insuffisante (${_playerPuissance}/${technique.cost})',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
+                          ),
+                        ],
+                      ],
                     ),
-                  ] else if (!technique.unlocked && !canUnlock) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: KaiColors.primaryDark,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.grey[700]!,
-                          width: 1,
-                        ),
+                  ),
+                ),
+                // Bouton d'action (débloquer si non débloqué)
+                if (!technique.unlocked)
+                  Container(
+                    padding: EdgeInsets.all(16),
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _playerXp >= technique.cost
+                          ? () {
+                              Navigator.pop(context);
+                              _unlockTechnique(technique);
+                            }
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: KaiColors.accent,
+                        foregroundColor: KaiColors.primaryDark,
+                        padding: EdgeInsets.symmetric(vertical: 16),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.lock,
-                            color: Colors.grey[600],
-                          ),
+                          Icon(Icons.lock_open),
                           SizedBox(width: 8),
                           Text(
-                            'Débloque d\'abord les techniques parentes',
-                            textAlign: TextAlign.center,
+                            _playerXp >= technique.cost
+                                ? 'Débloquer (${technique.cost} XP)'
+                                : 'XP insuffisante (${_playerXp}/${technique.cost})',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.grey[600],
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ],
-              ),
+                  ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildDetailChip(String label, IconData icon, Color affinityColor) {
+  Widget _buildStatItem(String label, String value) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: EdgeInsets.only(bottom: 8, right: 8),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: KaiColors.primaryDark,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: affinityColor.withOpacity(0.5),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 2,
-            offset: Offset(0, 1),
-          ),
-        ],
+        color: KaiColors.cardBackground,
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: affinityColor),
-          SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
               fontSize: 12,
+              color: KaiColors.textSecondary,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
               fontWeight: FontWeight.bold,
               color: KaiColors.textPrimary,
             ),
@@ -976,5 +1101,46 @@ class _TechniqueTreeScreenState extends State<TechniqueTreeScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _upgradeTechnique(
+      Technique technique, int currentLevel, int upgradeCost) async {
+    try {
+      if (_ninjaId.isEmpty) {
+        throw Exception('Aucun ninja actif trouvé');
+      }
+
+      // 1. Déduire l'XP du ninja
+      await _firestore.collection('ninjas').doc(_ninjaId).update({
+        'xp': FieldValue.increment(-upgradeCost),
+      });
+
+      // 2. Mettre à jour le niveau de la technique dans la table pivot
+      await _techniqueService.upgradeTechnique(
+          _ninjaId, technique.id, currentLevel + 1);
+
+      // 3. Rafraîchir les données
+      await _getCurrentNinja();
+      await _loadTechniques();
+
+      // 4. Fermer le modal
+      Navigator.pop(context);
+
+      // 5. Afficher le message de succès
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Technique améliorée au niveau ${currentLevel + 1}'),
+          backgroundColor: KaiColors.success,
+        ),
+      );
+    } catch (e) {
+      print('Erreur lors de l\'amélioration de la technique: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de l\'amélioration de la technique'),
+          backgroundColor: KaiColors.error,
+        ),
+      );
+    }
   }
 }

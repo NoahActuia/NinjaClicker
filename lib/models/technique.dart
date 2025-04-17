@@ -15,12 +15,11 @@ class Technique {
   final String? animation;
   final bool isDefault;
   final String? affinity; // 'Flux', 'Fracture', 'Sceau', 'Dérive', 'Frappe'
-  final Map<String, dynamic>?
-      effectDetails; // détails supplémentaires sur l'effet
-  final String? conditionGenerated; // condition générée par la technique
-  final bool unlocked; // Si la technique est débloquée dans l'arbre
-  final int techLevel; // Niveau de la technique dans l'arbre
-  final String? parentTechId; // ID de la technique parente dans l'arbre
+  final Map<String, dynamic>? effectDetails;
+  final String? conditionGenerated;
+  final bool unlocked;
+  final int techLevel;
+  final String? parentTechId;
   int level = 0;
 
   // Propriétés de compatibilité
@@ -35,9 +34,9 @@ class Technique {
     required this.id,
     required this.name,
     required this.description,
-    required this.cost,
-    required this.powerPerSecond,
-    required this.sound,
+    this.cost = 0,
+    this.powerPerSecond = 0,
+    this.sound = '',
     required this.type,
     this.trigger,
     required this.effect,
@@ -59,9 +58,9 @@ class Technique {
     String id = '',
     required String nom,
     required String description,
-    required int cout,
-    required int puissanceParSeconde,
-    required String son,
+    int cout = 0,
+    int puissanceParSeconde = 0,
+    String son = '',
     String type = 'active',
     String? trigger,
     String effect = 'damage',
@@ -108,9 +107,9 @@ class Technique {
       id: doc.id,
       name: data['name'] ?? '',
       description: data['description'] ?? '',
-      cost: data['cost'] ?? 0,
-      powerPerSecond: data['powerPerSecond'] ?? 0,
-      sound: data['sound'] ?? '',
+      cost: data['cost'] as int? ?? 0,
+      powerPerSecond: data['powerPerSecond'] as int? ?? 0,
+      sound: data['sound'] as String? ?? '',
       type: data['type'] ?? 'auto',
       trigger: data['trigger'],
       effect: data['effect'] ?? 'damage',
@@ -171,10 +170,9 @@ class Technique {
       id: json['id'] ?? '',
       name: json['nom'] ?? json['name'] ?? '',
       description: json['description'] ?? '',
-      cost: json['cout'] ?? json['cost'] ?? 0,
-      powerPerSecond:
-          json['puissanceParSeconde'] ?? json['powerPerSecond'] ?? 0,
-      sound: json['son'] ?? json['sound'] ?? '',
+      cost: json['cout'] as int? ?? 0,
+      powerPerSecond: json['puissanceParSeconde'] as int? ?? 0,
+      sound: json['son'] as String? ?? '',
       type: json['type'] ?? 'auto',
       trigger: json['trigger'],
       effect: json['effect'] ?? 'damage',

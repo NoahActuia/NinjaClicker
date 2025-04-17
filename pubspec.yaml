@@ -72,6 +72,8 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - assets/images/ninja1.png
+    - assets/images/ninja2.png
     - assets/images/naruto_normal.png
     - assets/images/naruto_chakra.png
     - assets/images/naruto_chakra1.png
@@ -83,6 +85,15 @@ flutter:
     - assets/images/kai_symbol.png
     - assets/images/fracture_overlay.png
     - assets/images/icon.png
+    - assets/images_histoire/intro1.png
+    - assets/images_histoire/intro2.png
+    - assets/images_histoire/intro3.png
+    - assets/images_histoire/combat1.png
+    - assets/images_histoire/combat11.png
+    - assets/images_histoire/combat111.png
+    - assets/images_histoire/combat1111.png
+    - assets/images_histoire/combat1fin.png
+    - assets/images_histoire/combat11fin.png
     # Images des missions
     - assets/images/academy.webp
     - assets/images/chunin_exam.webp

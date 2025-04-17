@@ -1,205 +1,170 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/mission.dart';
 import '../models/technique.dart';
 
 class MissionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  static const String _missionsKey = 'missions';
+  final SharedPreferences _prefs;
 
-  // Liste des missions par défaut
-  List<Mission> getMissions() {
-    return [
-      Mission(
-        id: 'm1',
-        titre: 'Académie des Ninjas',
-        description:
-            'Réussir l\'examen de l\'académie en apprenant à maîtriser le chakra',
-        image: 'assets/images/academy.webp',
-        difficulte: 1,
-        puissanceRequise: 0,
-        recompensePuissance: 50,
-        recompenses: [
-          Recompense(
-              type: 'technique',
-              quantite: 1,
-              technique: Technique.compat(
-                nom: 'Substitution',
-                description: 'Remplacer son corps par un objet',
-                cout: 100,
-                puissanceParSeconde: 3,
-                son: 'sounds/technique_substitution.mp3',
-              )),
-        ],
-        completed: false,
-      ),
-      Mission(
-        id: 'm2',
-        titre: 'Examen Chunin',
-        description: 'Affronter les meilleurs ninjas de votre génération',
-        image: 'assets/images/chunin_exam.webp',
-        difficulte: 2,
-        puissanceRequise: 200,
-        recompensePuissance: 150,
-        recompenses: [
-          Recompense(type: 'clone', quantite: 2),
-        ],
-        completed: false,
-      ),
-      Mission(
-        id: 'm3',
-        titre: 'Récupération de Sasuke',
-        description: 'Retrouver Sasuke et le ramener au village',
-        image: 'assets/images/sasuke_retrieval.webp',
-        difficulte: 3,
-        puissanceRequise: 500,
-        recompensePuissance: 300,
-        recompenses: [
-          Recompense(
-              type: 'technique',
-              quantite: 1,
-              technique: Technique.compat(
-                nom: 'Rasengan Géant',
-                description: 'Version améliorée du Rasengan',
-                cout: 2000,
-                puissanceParSeconde: 100,
-                son: 'sounds/technique_rasengan_geant.mp3',
-              )),
-        ],
-        completed: false,
-      ),
-      Mission(
-        id: 'm4',
-        titre: 'Entraînement avec Jiraiya',
-        description: 'Partir en voyage avec l\'un des légendaires Sannin',
-        image: 'assets/images/jiraiya_training.webp',
-        difficulte: 4,
-        puissanceRequise: 1000,
-        recompensePuissance: 500,
-        recompenses: [
-          Recompense(type: 'clone', quantite: 3),
-          Recompense(type: 'puissance', quantite: 500),
-        ],
-        completed: false,
-      ),
-      Mission(
-        id: 'm5',
-        titre: 'Combat contre Pain',
-        description: 'Affronter le chef de l\'Akatsuki pour sauver le village',
-        image: 'assets/images/pain_battle.webp',
-        difficulte: 5,
-        puissanceRequise: 2000,
-        recompensePuissance: 1000,
-        recompenses: [
-          Recompense(
-              type: 'technique',
-              quantite: 1,
-              technique: Technique.compat(
-                nom: 'Mode Sage Parfait',
-                description: 'Maîtrise parfaite de l\'énergie naturelle',
-                cout: 10000,
-                puissanceParSeconde: 500,
-                son: 'sounds/technique_mode_sage_parfait.mp3',
-              )),
-        ],
-        completed: false,
-      ),
-    ];
-  }
+  MissionService(this._prefs);
+
+  List<Mission> _missions = [
+    Mission(
+      id: 1,
+      name: 'Académie des Ninjas',
+      description: 'Commencez votre formation de ninja et apprenez les bases du Kai.',
+      difficulty: 1,
+      rewards: {
+        'puissance': 100,
+        'technique': 'Clone de Kai',
+        'histoire': 'Vous avez fait vos premiers pas dans la maîtrise du Kai.',
+      },
+      enemyLevel: 1,
+      puissanceRequise: 0,
+      image: 'assets/images/academy.webp',
+    ),
+    Mission(
+      id: 2,
+      name: 'Examen Chunin',
+      description: 'Prouvez votre valeur lors de l\'examen Chunin.',
+      difficulty: 2,
+      rewards: {
+        'puissance': 200,
+        'technique': 'Frappe du Kai',
+        'histoire': 'Vous avez démontré votre maîtrise croissante du Kai.',
+      },
+      enemyLevel: 2,
+      puissanceRequise: 150,
+      image: 'assets/images/chunin_exam.webp',
+    ),
+    Mission(
+      id: 3,
+      name: 'Récupération de Sasuke',
+      description: 'Une mission de rang S pour sauver un camarade.',
+      difficulty: 3,
+      rewards: {
+        'puissance': 300,
+        'technique': 'Rasengan',
+        'histoire': 'La puissance du Kai se révèle dans les moments critiques.',
+      },
+      enemyLevel: 3,
+      puissanceRequise: 250,
+      image: 'assets/images/rescue.webp',
+    ),
+    Mission(
+      id: 4,
+      name: 'Entraînement avec Jiraiya',
+      description: 'Apprenez les secrets du Kai auprès d\'un maître.',
+      difficulty: 4,
+      rewards: {
+        'puissance': 400,
+        'technique': 'Mode Ermite',
+        'histoire': 'La sagesse du Kai transcende la simple puissance.',
+      },
+      enemyLevel: 4,
+      puissanceRequise: 350,
+      image: 'assets/images/training.webp',
+    ),
+    Mission(
+      id: 5,
+      name: 'Combat contre Pain',
+      description: 'Affrontez le chef de l\'Akatsuki.',
+      difficulty: 5,
+      rewards: {
+        'puissance': 500,
+        'technique': 'Bombe de Kai',
+        'histoire': 'Le véritable pouvoir naît de la compréhension.',
+      },
+      enemyLevel: 5,
+      puissanceRequise: 450,
+      image: 'assets/images/pain.webp',
+    ),
+  ];
+
+  List<Mission> get missions => _missions;
 
   // Vérifier si une mission est disponible
   bool isMissionAvailable(Mission mission, int currentPuissance) {
     return currentPuissance >= mission.puissanceRequise;
   }
 
-  // Sauvegarder les missions dans Firebase
+  // Sauvegarder les missions dans Firebase et SharedPreferences
   Future<void> saveMissions(List<Mission> missions) async {
     try {
-      final user = _auth.currentUser;
-      if (user == null) {
-        print(
-            'Impossible de sauvegarder les missions: aucun utilisateur connecté');
-        return;
-      }
-
-      // Convertir les missions en données JSON
+      // Sauvegarder localement
       final missionData = missions.map((mission) => mission.toJson()).toList();
+      await _prefs.setString(_missionsKey, jsonEncode(missionData));
 
-      // Sauvegarder dans la collection userMissions avec l'ID de l'utilisateur
-      await _firestore.collection('userMissions').doc(user.uid).set({
-        'missions': missionData,
-        'updatedAt': Timestamp.now(),
-      });
-
-      print('Missions sauvegardées avec succès');
+      // Sauvegarder dans Firebase si l'utilisateur est connecté
+      final user = _auth.currentUser;
+      if (user != null) {
+        await _firestore.collection('userMissions').doc(user.uid).set({
+          'missions': missionData,
+          'updatedAt': Timestamp.now(),
+        });
+      }
     } catch (e) {
       print('Erreur lors de la sauvegarde des missions: $e');
       throw e;
     }
   }
 
-  // Charger les missions depuis Firebase
+  // Charger les missions depuis Firebase ou SharedPreferences
   Future<List<Mission>> loadMissions() async {
     try {
+      // D'abord essayer de charger depuis Firebase
       final user = _auth.currentUser;
-      if (user == null) {
-        print('Impossible de charger les missions: aucun utilisateur connecté');
-        return getMissions(); // Retourner les missions par défaut
-      }
-
-      // Récupérer le document des missions de l'utilisateur
-      final doc =
-          await _firestore.collection('userMissions').doc(user.uid).get();
-
-      if (doc.exists && doc.data() != null) {
-        final data = doc.data()!;
-        if (data.containsKey('missions')) {
-          // Convertir les données en liste de missions
-          final missionList = List<Map<String, dynamic>>.from(data['missions']);
-          final missions = missionList.map((m) => Mission.fromJson(m)).toList();
-
-          print('${missions.length} missions chargées depuis Firebase');
-          return missions;
+      if (user != null) {
+        final doc = await _firestore.collection('userMissions').doc(user.uid).get();
+        if (doc.exists && doc.data() != null) {
+          final data = doc.data()!;
+          if (data.containsKey('missions')) {
+            final missionList = List<Map<String, dynamic>>.from(data['missions']);
+            _missions = missionList.map((m) => Mission.fromJson(m)).toList();
+            return _missions;
+          }
         }
       }
 
-      // Si aucune mission n'est trouvée, retourner les missions par défaut
-      print(
-          'Aucune mission trouvée dans Firebase, utilisation des missions par défaut');
-      return getMissions();
+      // Si pas de données Firebase, essayer SharedPreferences
+      final String? missionsJson = _prefs.getString(_missionsKey);
+      if (missionsJson != null) {
+        final List<dynamic> missionList = jsonDecode(missionsJson);
+        _missions = missionList.map((m) => Mission.fromJson(m as Map<String, dynamic>)).toList();
+        return _missions;
+      }
+
+      // Si aucune donnée n'est trouvée, retourner les missions par défaut
+      return _missions;
     } catch (e) {
       print('Erreur lors du chargement des missions: $e');
-      return getMissions(); // En cas d'erreur, retourner les missions par défaut
+      return _missions;
     }
   }
 
   // Mettre à jour une mission spécifique
   Future<void> updateMission(Mission mission) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) {
-        print(
-            'Impossible de mettre à jour la mission: aucun utilisateur connecté');
-        return;
-      }
+    final index = _missions.indexWhere((m) => m.id == mission.id);
+    if (index != -1) {
+      _missions[index] = mission;
+      await saveMissions(_missions);
+    }
+  }
 
-      // Récupérer les missions existantes
-      final missions = await loadMissions();
+  bool canStartMission(Mission mission, int currentPuissance) {
+    return currentPuissance >= mission.puissanceRequise;
+  }
 
-      // Trouver et mettre à jour la mission
-      final index = missions.indexWhere((m) => m.id == mission.id);
-      if (index != -1) {
-        missions[index] = mission;
-
-        // Sauvegarder toutes les missions
-        await saveMissions(missions);
-        print('Mission ${mission.id} mise à jour avec succès');
-      } else {
-        print('Mission non trouvée: ${mission.id}');
-      }
-    } catch (e) {
-      print('Erreur lors de la mise à jour de la mission: $e');
-      throw e;
+  void completeMission(int missionId) {
+    final index = _missions.indexWhere((m) => m.id == missionId);
+    if (index != -1) {
+      _missions[index].completed = true;
+      saveMissions(_missions);
     }
   }
 }

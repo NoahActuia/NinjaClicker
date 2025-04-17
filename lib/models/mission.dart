@@ -1,65 +1,7 @@
 import 'technique.dart';
 
-class Mission {
-  final String id;
-  final String titre;
-  final String description;
-  final String image;
-  final int puissanceRequise;
-  final int recompensePuissance;
-  final List<Recompense> recompenses;
-  final String? histoire;
-  final int? difficulte;
-  bool completed = false;
-
-  Mission({
-    required this.id,
-    required this.titre,
-    required this.description,
-    required this.image,
-    required this.puissanceRequise,
-    required this.recompensePuissance,
-    required this.recompenses,
-    this.histoire,
-    this.difficulte,
-    this.completed = false,
-  });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'titre': titre,
-      'description': description,
-      'image': image,
-      'puissanceRequise': puissanceRequise,
-      'recompensePuissance': recompensePuissance,
-      'recompenses': recompenses.map((r) => r.toJson()).toList(),
-      'histoire': histoire,
-      'difficulte': difficulte,
-      'completed': completed,
-    };
-  }
-
-  factory Mission.fromJson(Map<String, dynamic> json) {
-    return Mission(
-      id: json['id'],
-      titre: json['titre'],
-      description: json['description'],
-      image: json['image'],
-      puissanceRequise: json['puissanceRequise'],
-      recompensePuissance: json['recompensePuissance'],
-      recompenses: (json['recompenses'] as List)
-          .map((r) => Recompense.fromJson(r))
-          .toList(),
-      histoire: json['histoire'],
-      difficulte: json['difficulte'],
-      completed: json['completed'] ?? false,
-    );
-  }
-}
-
 class Recompense {
-  final String type; // 'technique', 'clone', 'puissance'
+  final String type;
   final int quantite;
   final Technique? technique;
 
@@ -73,17 +15,94 @@ class Recompense {
     return {
       'type': type,
       'quantite': quantite,
-      'technique': technique?.toJson(),
+      if (technique != null) 'technique': technique!.toJson(),
     };
   }
 
   factory Recompense.fromJson(Map<String, dynamic> json) {
     return Recompense(
-      type: json['type'],
-      quantite: json['quantite'],
+      type: json['type'] as String,
+      quantite: json['quantite'] as int,
       technique: json['technique'] != null
-          ? Technique.fromJson(json['technique'])
+          ? Technique.fromJson(json['technique'] as Map<String, dynamic>)
           : null,
     );
   }
+}
+
+class Mission {
+  final dynamic id;
+  final String name;
+  final String description;
+  final int difficulty;
+  final Map<String, dynamic> rewards;
+  final int enemyLevel;
+  final String? image;
+  final String? histoire;
+  bool completed;
+  final int puissanceRequise;
+  final List<Recompense> recompenses;
+  final int recompensePuissance;
+
+  Mission({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.difficulty,
+    required this.rewards,
+    required this.enemyLevel,
+    this.image,
+    this.histoire,
+    this.completed = false,
+    this.puissanceRequise = 0,
+    List<Recompense>? recompenses,
+    this.recompensePuissance = 0,
+  }) : recompenses = recompenses ?? [];
+
+  // Getters pour la compatibilité
+  String get titre => name;
+  int get difficulte => difficulty;
+
+  // Convertir une Map en objet Mission
+  factory Mission.fromMap(Map<String, dynamic> map) {
+    return Mission(
+      id: map['id'],
+      name: map['name'] as String,
+      description: map['description'] as String,
+      difficulty: map['difficulty'] as int,
+      rewards: Map<String, dynamic>.from(map['rewards'] as Map),
+      enemyLevel: map['enemyLevel'] as int,
+      image: map['image'] as String?,
+      histoire: map['histoire'] as String?,
+      completed: map['completed'] as bool? ?? false,
+      puissanceRequise: map['puissanceRequise'] as int? ?? 0,
+      recompenses: (map['recompenses'] as List<dynamic>?)
+              ?.map((e) => Recompense.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      recompensePuissance: map['recompensePuissance'] as int? ?? 0,
+    );
+  }
+
+  // Convertir l'objet Mission en Map
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'difficulty': difficulty,
+      'rewards': rewards,
+      'enemyLevel': enemyLevel,
+      'image': image,
+      'histoire': histoire,
+      'completed': completed,
+      'puissanceRequise': puissanceRequise,
+      'recompenses': recompenses.map((r) => r.toJson()).toList(),
+      'recompensePuissance': recompensePuissance,
+    };
+  }
+
+  // Méthodes de sérialisation JSON
+  factory Mission.fromJson(Map<String, dynamic> json) => Mission.fromMap(json);
+  Map<String, dynamic> toJson() => toMap();
 }

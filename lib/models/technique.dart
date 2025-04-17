@@ -42,12 +42,6 @@ class Technique {
     required this.id,
     required this.name,
     required this.description,
-<<<<<<< HEAD
-    this.cost = 0,
-    this.powerPerSecond = 0,
-    this.sound = '',
-=======
->>>>>>> 60c4a95a071637747a4098e65ba3a7e233cd603a
     required this.type,
     this.affinity,
     required this.cost_kai,
@@ -69,12 +63,6 @@ class Technique {
     String id = '',
     required String nom,
     required String description,
-<<<<<<< HEAD
-    int cout = 0,
-    int puissanceParSeconde = 0,
-    String son = '',
-=======
->>>>>>> 60c4a95a071637747a4098e65ba3a7e233cd603a
     String type = 'active',
     String? affinity,
     int cout = 50,
@@ -118,21 +106,7 @@ class Technique {
       id: doc.id,
       name: data['name'] ?? '',
       description: data['description'] ?? '',
-<<<<<<< HEAD
-      cost: data['cost'] as int? ?? 0,
-      powerPerSecond: data['powerPerSecond'] as int? ?? 0,
-      sound: data['sound'] as String? ?? '',
-      type: data['type'] ?? 'auto',
-      trigger: data['trigger'],
-      effect: data['effect'] ?? 'damage',
-      chakraCost: data['chakraCost'] ?? 0,
-      cooldown: data['cooldown'] ?? 0,
-      animation: data['animation'],
-      isDefault: data['isDefault'] ?? false,
-      level: data['level'] ?? 0,
-=======
       type: data['type'] ?? 'active',
->>>>>>> 60c4a95a071637747a4098e65ba3a7e233cd603a
       affinity: data['affinity'],
       cost_kai: data['cost_kai'] ?? data['cost'] ?? data['kaiCost'] ?? 50,
       cooldown: data['cooldown'] ?? 3,
@@ -200,21 +174,7 @@ class Technique {
       id: json['id'] ?? '',
       name: json['nom'] ?? json['name'] ?? '',
       description: json['description'] ?? '',
-<<<<<<< HEAD
-      cost: json['cout'] as int? ?? 0,
-      powerPerSecond: json['puissanceParSeconde'] as int? ?? 0,
-      sound: json['son'] as String? ?? '',
-      type: json['type'] ?? 'auto',
-      trigger: json['trigger'],
-      effect: json['effect'] ?? 'damage',
-      chakraCost: json['chakraCost'] ?? 50,
-      cooldown: json['cooldown'] ?? 1,
-      animation: json['animation'],
-      isDefault: json['isDefault'] ?? false,
-      level: json['niveau'] ?? json['level'] ?? 0,
-=======
       type: json['type'] ?? 'active',
->>>>>>> 60c4a95a071637747a4098e65ba3a7e233cd603a
       affinity: json['affinity'],
       cost_kai: json['cout'] ??
           json['cost'] ??

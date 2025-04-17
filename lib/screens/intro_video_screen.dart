@@ -449,7 +449,7 @@ class _IntroVideoScreenState extends State<IntroVideoScreen>
       // Bien s'assurer que l'audio est complètement arrêté
       try {
         _audioService.stopAmbiance();
-        _audioService.stopChakraSound();
+        _audioService.stopkaiSound();
       } catch (e) {
         print('Erreur lors de l\'arrêt des sons: $e');
       }

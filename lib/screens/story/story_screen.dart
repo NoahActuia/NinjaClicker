@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/mission.dart';
 import '../../models/technique.dart';
 import '../../services/mission_service.dart';
+import '../../styles/kai_colors.dart';
 import 'mission_detail_screen.dart';
 import '../story_intro.dart';
 import 'story_path_screen.dart';

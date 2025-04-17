@@ -1,14 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class Ninja {
+class Kaijin {
   final String id;
   final String userId;
   final String name;
   int xp;
   int level;
+  int totalLifetimeXp; // XP totale cumulée depuis la création du personnage
   int strength;
   int agility;
-  int chakra;
+  int kai;
   int speed;
   int defense;
   int xpPerClick;
@@ -16,6 +17,7 @@ class Ninja {
   int power;
   Map<String, String> appearance;
   DateTime lastConnected;
+  DateTime? previousLastConnected;
 
   // Données de classement
   String rank;
@@ -31,15 +33,16 @@ class Ninja {
   Map<String, int> senseiLevels = {};
   Map<String, int> senseiQuantities = {};
 
-  Ninja({
+  Kaijin({
     required this.id,
     required this.userId,
     required this.name,
     this.xp = 0,
     this.level = 1,
+    this.totalLifetimeXp = 0,
     this.strength = 10,
     this.agility = 10,
-    this.chakra = 10,
+    this.kai = 10,
     this.speed = 10,
     this.defense = 10,
     this.xpPerClick = 1,
@@ -56,10 +59,12 @@ class Ninja {
     this.wins = 0,
     this.losses = 0,
     DateTime? lastConnected,
-  }) : this.lastConnected = lastConnected ?? DateTime.now();
+    DateTime? previousLastConnected,
+  })  : this.lastConnected = lastConnected ?? DateTime.now(),
+        this.previousLastConnected = previousLastConnected;
 
   // Depuis Firestore
-  factory Ninja.fromFirestore(DocumentSnapshot doc) {
+  factory Kaijin.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
 
     // Gérer spécifiquement le cas où passiveXp est un double
@@ -74,15 +79,17 @@ class Ninja {
       passiveXpInt = (passiveXpValue as double?) ?? 0;
     }
 
-    return Ninja(
+    return Kaijin(
       id: doc.id,
       userId: data['userId'] ?? '',
       name: data['name'] ?? '',
       xp: data['xp'] ?? 0,
       level: data['level'] ?? 1,
+      totalLifetimeXp:
+          data['totalLifetimeXp'] ?? data['xp'] ?? 0, // Migration progressive
       strength: data['strength'] ?? 10,
       agility: data['agility'] ?? 10,
-      chakra: data['chakra'] ?? 10,
+      kai: data['kai'] ?? 10,
       speed: data['speed'] ?? 10,
       defense: data['defense'] ?? 10,
       xpPerClick: data['xpPerClick'] ?? 1,
@@ -98,6 +105,9 @@ class Ninja {
       lastConnected: data['lastConnected'] != null
           ? DateTime.fromMillisecondsSinceEpoch(data['lastConnected'])
           : DateTime.now(),
+      previousLastConnected: data['previousLastConnected'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(data['previousLastConnected'])
+          : null,
     )
       ..techniques = List<String>.from(data['techniques'] ?? [])
       ..techniqueLevels = Map<String, int>.from(data['techniqueLevels'] ?? {})
@@ -114,9 +124,10 @@ class Ninja {
       'name': name,
       'xp': xp,
       'level': level,
+      'totalLifetimeXp': totalLifetimeXp,
       'strength': strength,
       'agility': agility,
-      'chakra': chakra,
+      'kai': kai,
       'speed': speed,
       'defense': defense,
       'xpPerClick': xpPerClick,
@@ -129,6 +140,7 @@ class Ninja {
       'wins': wins,
       'losses': losses,
       'lastConnected': lastConnected.millisecondsSinceEpoch,
+      'previousLastConnected': previousLastConnected?.millisecondsSinceEpoch,
       'techniques': techniques,
       'techniqueLevels': techniqueLevels,
       'senseis': senseis,
@@ -137,21 +149,21 @@ class Ninja {
     };
   }
 
-  // Calculer le score total du ninja (pour le classement)
+  // Calculer le score total du kaijin (pour le classement)
   int getTotalScore() {
     return power > 0 ? power : level * 1000 + xp;
   }
 
-  // Obtenir la classe du ninja en fonction de son niveau
-  String getNinjaClass() {
-    if (level >= 50) return 'Kage';
-    if (level >= 30) return 'Jonin';
-    if (level >= 20) return 'Chunin';
-    if (level >= 10) return 'Genin';
-    return 'Académie';
+  // Obtenir la classe du kaijin en fonction de son niveau
+  String getKaijinClass() {
+    if (level >= 50) return 'Éclaireur';
+    if (level >= 30) return 'Gardien';
+    if (level >= 20) return 'Protecteur';
+    if (level >= 10) return 'Initié';
+    return 'Novice';
   }
 
-  // Obtenir le rang du ninja (1er, 2ème, etc.)
+  // Obtenir le rang du kaijin (1er, 2ème, etc.)
   String getFormattedRank() {
     final int rankNum = int.tryParse(rank) ?? 0;
     if (rankNum == 1) return '1er';

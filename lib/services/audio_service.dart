@@ -12,11 +12,11 @@ class AudioService {
   bool isAmbiancePlaying = false;
   bool isEffectsSoundPlaying = false;
 
-  bool ambianceSoundEnabled = true;
+  bool ambianceSoundEnabled = false;
   bool effectsSoundEnabled = true;
 
   double effectsVolume = 0.5;
-  double ambianceVolume = 0.15;
+  double ambianceVolume = 0.0;
 
   AudioService._internal();
 
@@ -49,7 +49,7 @@ class AudioService {
     }
   }
 
-  Future<void> playChakraSound() async {
+  Future<void> playkaiSound() async {
     if (!effectsSoundEnabled) return;
 
     try {
@@ -57,7 +57,7 @@ class AudioService {
           volume: effectsVolume);
       isEffectsSoundPlaying = true;
     } catch (e) {
-      print('Erreur lors de la lecture du son chakra: $e');
+      print('Erreur lors de la lecture du son kai: $e');
     }
   }
 
@@ -72,12 +72,12 @@ class AudioService {
     }
   }
 
-  Future<void> stopChakraSound() async {
+  Future<void> stopkaiSound() async {
     try {
       await effectPlayer.stop();
       isEffectsSoundPlaying = false;
     } catch (e) {
-      print('Erreur lors de l\'arrêt du son chakra: $e');
+      print('Erreur lors de l\'arrêt du son kai: $e');
     }
   }
 
@@ -88,7 +88,7 @@ class AudioService {
     }
   }
 
-  Future<void> fadeOutChakraSound() async {
+  Future<void> fadeOutkaiSound() async {
     if (!isEffectsSoundPlaying || !effectsSoundEnabled) return;
 
     double volume = effectsVolume;
@@ -98,7 +98,7 @@ class AudioService {
       await Future.delayed(const Duration(milliseconds: 50));
     }
 
-    await stopChakraSound();
+    await stopkaiSound();
   }
 
   void toggleAmbianceSound(bool enabled) {
@@ -135,7 +135,7 @@ class AudioService {
 
   void dispose() {
     stopAmbiance();
-    stopChakraSound();
+    stopkaiSound();
 
     ambiancePlayer.dispose();
     effectPlayer.dispose();
@@ -173,7 +173,7 @@ class AudioService {
   Future<void> stopAll() async {
     try {
       await stopAmbiance();
-      await stopChakraSound();
+      await stopkaiSound();
 
       // Arrêter également les autres lecteurs
       await techniquePlayer.stop();

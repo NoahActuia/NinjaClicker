@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import '../models/ninja.dart';
-import '../services/ninja_service.dart';
+import '../models/kaijin.dart';
+import '../services/kaijin_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../styles/kai_colors.dart';
 
 class RankingScreen extends StatefulWidget {
   const RankingScreen({Key? key}) : super(key: key);
@@ -11,8 +12,8 @@ class RankingScreen extends StatefulWidget {
 }
 
 class _RankingScreenState extends State<RankingScreen> {
-  final NinjaService _ninjaService = NinjaService();
-  List<Ninja> _rankedNinjas = [];
+  final KaijinService _kaijinService = KaijinService();
+  List<Kaijin> _rankedKaijins = [];
   bool _isLoading = true;
   String? _currentUserId;
   String _sortFilter = 'level'; // 'level' ou 'score'
@@ -39,18 +40,18 @@ class _RankingScreenState extends State<RankingScreen> {
     });
 
     try {
-      final ninjas = await _ninjaService.getAllNinjasRankedByLevel();
+      final kaijins = await _kaijinService.getAllKaijinsRankedByLevel();
 
       setState(() {
-        _rankedNinjas = ninjas;
+        _rankedKaijins = kaijins;
 
         // Trier selon le filtre actuel
         if (_sortFilter == 'score') {
-          _rankedNinjas
+          _rankedKaijins
               .sort((a, b) => b.getTotalScore().compareTo(a.getTotalScore()));
           // Mettre à jour les rangs
-          for (int i = 0; i < _rankedNinjas.length; i++) {
-            _rankedNinjas[i].rank = (i + 1).toString();
+          for (int i = 0; i < _rankedKaijins.length; i++) {
+            _rankedKaijins[i].rank = (i + 1).toString();
           }
         }
 
@@ -67,23 +68,31 @@ class _RankingScreenState extends State<RankingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: KaiColors.background,
       appBar: AppBar(
-        title: const Text('Classement des Ninjas'),
+        title: const Text(
+          'Classement des Fracturés',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: KaiColors.textPrimary,
+          ),
+        ),
+        backgroundColor: KaiColors.primaryDark,
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.deepOrange.shade800,
-                Colors.orange.shade700,
+                KaiColors.primaryDark,
+                KaiColors.accent.withOpacity(0.2),
               ],
             ),
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: KaiColors.accent),
             onPressed: _loadRanking,
             tooltip: 'Actualiser',
           ),
@@ -94,7 +103,11 @@ class _RankingScreenState extends State<RankingScreen> {
           _buildFilterBar(),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: KaiColors.accent,
+                    ),
+                  )
                 : _buildRankingList(),
           ),
         ],
@@ -106,10 +119,10 @@ class _RankingScreenState extends State<RankingScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: KaiColors.primaryDark,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: KaiColors.accent.withOpacity(0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -121,6 +134,7 @@ class _RankingScreenState extends State<RankingScreen> {
             'Trier par:',
             style: TextStyle(
               fontWeight: FontWeight.bold,
+              color: KaiColors.textSecondary,
             ),
           ),
           const SizedBox(width: 12),
@@ -136,11 +150,11 @@ class _RankingScreenState extends State<RankingScreen> {
             icon: Icons.score,
           ),
           const Spacer(),
-          if (!_isLoading && _rankedNinjas.isNotEmpty)
+          if (!_isLoading && _rankedKaijins.isNotEmpty)
             Text(
-              '${_rankedNinjas.length} ninjas',
-              style: TextStyle(
-                color: Colors.grey.shade600,
+              '${_rankedKaijins.length} fracturés',
+              style: const TextStyle(
+                color: KaiColors.textSecondary,
                 fontSize: 12,
               ),
             ),
@@ -164,10 +178,15 @@ class _RankingScreenState extends State<RankingScreen> {
           Icon(
             icon,
             size: 16,
-            color: isSelected ? Colors.white : Colors.grey.shade700,
+            color: isSelected ? Colors.white : KaiColors.textSecondary,
           ),
           const SizedBox(width: 4),
-          Text(label),
+          Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.white : KaiColors.textSecondary,
+            ),
+          ),
         ],
       ),
       onSelected: (selected) {
@@ -177,29 +196,29 @@ class _RankingScreenState extends State<RankingScreen> {
 
             // Trier la liste selon le nouveau filtre
             if (value == 'level') {
-              _rankedNinjas.sort((a, b) {
+              _rankedKaijins.sort((a, b) {
                 if (a.level != b.level) {
                   return b.level.compareTo(a.level);
                 }
                 return b.xp.compareTo(a.xp);
               });
             } else if (value == 'score') {
-              _rankedNinjas.sort(
+              _rankedKaijins.sort(
                   (a, b) => b.getTotalScore().compareTo(a.getTotalScore()));
             }
 
             // Mettre à jour les rangs
-            for (int i = 0; i < _rankedNinjas.length; i++) {
-              _rankedNinjas[i].rank = (i + 1).toString();
+            for (int i = 0; i < _rankedKaijins.length; i++) {
+              _rankedKaijins[i].rank = (i + 1).toString();
             }
           });
         }
       },
-      backgroundColor: Colors.grey.shade200,
-      selectedColor: Colors.deepOrange.shade600,
+      backgroundColor: KaiColors.cardBackground,
+      selectedColor: KaiColors.accent,
       checkmarkColor: Colors.white,
       labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.grey.shade700,
+        color: isSelected ? Colors.white : KaiColors.textSecondary,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -207,19 +226,19 @@ class _RankingScreenState extends State<RankingScreen> {
   }
 
   Widget _buildRankingList() {
-    if (_rankedNinjas.isEmpty) {
+    if (_rankedKaijins.isEmpty) {
       return const Center(
         child: Text(
-          'Aucun ninja dans le classement',
+          'Aucun fracturé dans le classement',
           style: TextStyle(fontSize: 18),
         ),
       );
     }
 
-    // Trouver le rang du ninja actuel
+    // Trouver le rang du kaijin actuel
     int? currentUserRank;
-    for (int i = 0; i < _rankedNinjas.length; i++) {
-      if (_rankedNinjas[i].userId == _currentUserId) {
+    for (int i = 0; i < _rankedKaijins.length; i++) {
+      if (_rankedKaijins[i].userId == _currentUserId) {
         currentUserRank = i + 1;
         break;
       }
@@ -236,10 +255,10 @@ class _RankingScreenState extends State<RankingScreen> {
             ),
           ),
           child: ListView.builder(
-            itemCount: _rankedNinjas.length,
+            itemCount: _rankedKaijins.length,
             itemBuilder: (context, index) {
-              final ninja = _rankedNinjas[index];
-              final isCurrentUser = ninja.userId == _currentUserId;
+              final kaijin = _rankedKaijins[index];
+              final isCurrentUser = kaijin.userId == _currentUserId;
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -260,7 +279,7 @@ class _RankingScreenState extends State<RankingScreen> {
                   title: Row(
                     children: [
                       Text(
-                        ninja.name,
+                        kaijin.name,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -302,9 +321,9 @@ class _RankingScreenState extends State<RankingScreen> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            ninja.getNinjaClass(),
+                            kaijin.getKaijinClass(),
                             style: TextStyle(
-                              color: _getLevelColor(ninja.level),
+                              color: _getLevelColor(kaijin.level),
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -316,7 +335,7 @@ class _RankingScreenState extends State<RankingScreen> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'Score: ${ninja.getTotalScore()}',
+                            'Score: ${kaijin.getTotalScore()}',
                             style: TextStyle(
                               color: Colors.grey.shade700,
                             ),
@@ -331,11 +350,11 @@ class _RankingScreenState extends State<RankingScreen> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: _getLevelColor(ninja.level),
+                      color: _getLevelColor(kaijin.level),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
-                      'Niveau ${ninja.level}',
+                      'Niveau ${kaijin.level}',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,

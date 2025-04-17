@@ -5,7 +5,7 @@ Module Description
 🎮 Système de clicker Gagne de l’XP en cliquant.
 🧍 Création et gestion de ninja Personnalisation initiale du personnage joueur.
 🧠 Système de progression Achat de Sensei (passif), de statistiques (caracs), et de techniques.
-⚔️ Système de combat (PvE & PvP) Combat tour par tour avec gestion de chakra et enchaînements techniques.
+⚔️ Système de combat (PvE & PvP) Combat tour par tour avec gestion de kai et enchaînements techniques.
 🌐 Mode en ligne Matchmaking, classement mondial, historique de combats.
 🛠️ Gestion de techniques Déblocage, combinaison, activation conditionnelle (combo logique).
 📈 Système de classement & rangs Système de rangs, classement mondial, saison etc.
@@ -13,7 +13,7 @@ Module Description
 📍 A. Création & Gestion du Ninja
 Nom, apparence (skin, bandeau, armes, etc.)
 
-Stats de base : force, agilité, chakra, vitesse, défense
+Stats de base : force, agilité, kai, vitesse, défense
 
 Techniques possédées (spéciales + auto)
 
@@ -48,7 +48,7 @@ Stats : augmenter les caracs (via XP ou autre monnaie secondaire)
 
 Techniques :
 
-Spéciales = chakra, déclenchées manuellement en combat
+Spéciales = kai, déclenchées manuellement en combat
 
 Auto = déclenchement conditionnel ou aléatoire, combo possibles
 
@@ -65,7 +65,7 @@ Conditions de déclenchement (ex : « après propulsion »)
 
 Effet (dégâts, stun, push, debuff, buff…)
 
-Coût (chakra ou gratuit)
+Coût (kai ou gratuit)
 
 Cooldown
 
@@ -76,13 +76,13 @@ Initiative (stat vitesse ?)
 
 Interface simple en choix de techniques
 
-Chakra consommé à chaque usage
+kai consommé à chaque usage
 
 Techniques auto = détectent les conditions et s’activent seules
 
 Combos : système de « chain logique »
 
-UI : barre de chakra, cooldowns, logs de combat
+UI : barre de kai, cooldowns, logs de combat
 
 📍 G. Mode en ligne (PvP)
 Matchmaking rapide

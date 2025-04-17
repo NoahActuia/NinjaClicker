@@ -3,12 +3,12 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../styles/kai_colors.dart';
 
-class ChakraButton extends StatefulWidget {
+class KaiButton extends StatefulWidget {
   final Function(int gainXp) onTap;
   final int puissance; // Valeur du combo à afficher
   final int totalXP; // Quantité d'XP totale à afficher
 
-  const ChakraButton({
+  const KaiButton({
     super.key,
     required this.onTap,
     required this.puissance,
@@ -16,23 +16,23 @@ class ChakraButton extends StatefulWidget {
   });
 
   @override
-  State<ChakraButton> createState() => _ChakraButtonState();
+  State<KaiButton> createState() => _KaiButtonState();
 }
 
-class _ChakraButtonState extends State<ChakraButton>
+class _KaiButtonState extends State<KaiButton>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
-  bool _isChakraMode = false;
-  Timer? _chakraTimer;
+  bool _iskaiMode = false;
+  Timer? _kaiTimer;
   int _comboClicks = 0; // Compteur de clics consécutifs
 
   // Animation pour afficher le nombre de clics
   List<ClickAnimation> _clickAnimations = [];
 
-  // Gestion de l'animation de chakra
-  int _chakraAnimationStep = 0;
-  final List<String> _chakraAnimationImages = [
+  // Gestion de l'animation de kai
+  int _kaiAnimationStep = 0;
+  final List<String> _kaiAnimationImages = [
     'assets/images/naruto_chakra.png',
     'assets/images/naruto_chakra1.png',
     'assets/images/naruto_chakra2.png',
@@ -43,9 +43,9 @@ class _ChakraButtonState extends State<ChakraButton>
   bool _isAnimatingForward = true; // Contrôle la direction de l'animation
 
   // Gestion du cercle d'énergie
-  double _chakraCircleSize = 220;
-  double _maxChakraCircleSize = 600;
-  Color _chakraCircleColor = KaiColors.accent
+  double _kaiCircleSize = 220;
+  double _maxkaiCircleSize = 600;
+  Color _kaiCircleColor = KaiColors.accent
       .withOpacity(0.4); // Changé à la couleur d'accent pour l'XP
 
   // Variables pour l'effet de pulsation
@@ -78,7 +78,7 @@ class _ChakraButtonState extends State<ChakraButton>
   @override
   void dispose() {
     _animationController.dispose();
-    _chakraTimer?.cancel();
+    _kaiTimer?.cancel();
     _animationTimer?.cancel();
     _comboResetTimer?.cancel();
     _pulsationTimer?.cancel();
@@ -103,21 +103,20 @@ class _ChakraButtonState extends State<ChakraButton>
     bool isEndOfCombo = false;
 
     setState(() {
-      _isChakraMode = true;
+      _iskaiMode = true;
       // Ne pas incrémenter _comboClicks ici, c'est fait par le GameScreen
 
       // Augmenter la taille du cercle d'énergie et changer sa couleur en fonction du compteur de combo
       if (_comboClicks > 1) {
-        _chakraCircleSize =
-            (_chakraCircleSize + 10).clamp(220.0, _maxChakraCircleSize);
+        _kaiCircleSize = (_kaiCircleSize + 10).clamp(220.0, _maxkaiCircleSize);
 
         // Transition de couleur basée sur _comboClicks
         double intensityFactor = (_comboClicks / 10).clamp(0.0, 1.0);
-        _chakraCircleColor = Color.lerp(KaiColors.primaryDark.withOpacity(0.4),
+        _kaiCircleColor = Color.lerp(KaiColors.primaryDark.withOpacity(0.4),
             KaiColors.accent.withOpacity(0.6), intensityFactor)!;
 
         // Commencer l'effet de pulsation si la taille max est atteinte ou presque
-        if (_chakraCircleSize >= _maxChakraCircleSize - 10 && !_isPulsating) {
+        if (_kaiCircleSize >= _maxkaiCircleSize - 10 && !_isPulsating) {
           _startPulsation();
         }
       }
@@ -164,20 +163,20 @@ class _ChakraButtonState extends State<ChakraButton>
     // Appeler le callback avec la valeur de gain (1 XP)
     widget.onTap(1);
 
-    // Démarrer ou réinitialiser l'animation de chakra
-    _startChakraAnimation();
+    // Démarrer ou réinitialiser l'animation de kai
+    _startkaiAnimation();
 
     // Annuler le timer précédent s'il existe
-    _chakraTimer?.cancel();
+    _kaiTimer?.cancel();
 
     // Créer un nouveau timer pour la durée d'affichage
-    _chakraTimer = Timer(const Duration(milliseconds: 200), () {
+    _kaiTimer = Timer(const Duration(milliseconds: 200), () {
       _startReverseAnimation();
     });
   }
 
-  // Démarrer l'animation du chakra vers l'avant
-  void _startChakraAnimation() {
+  // Démarrer l'animation du kai vers l'avant
+  void _startkaiAnimation() {
     // Annuler le timer d'animation précédent s'il existe
     _animationTimer?.cancel();
 
@@ -185,8 +184,8 @@ class _ChakraButtonState extends State<ChakraButton>
     _isAnimatingForward = true;
 
     // Si nous commençons une nouvelle animation, réinitialiser à la première étape
-    if (!_isChakraMode) {
-      _chakraAnimationStep = 0;
+    if (!_iskaiMode) {
+      _kaiAnimationStep = 0;
     }
 
     // Créer un nouveau timer pour avancer dans les images d'animation
@@ -199,8 +198,8 @@ class _ChakraButtonState extends State<ChakraButton>
       setState(() {
         // Avancer à l'étape suivante uniquement si nous ne sommes pas déjà à la dernière image
         if (_isAnimatingForward &&
-            _chakraAnimationStep < _chakraAnimationImages.length - 1) {
-          _chakraAnimationStep++;
+            _kaiAnimationStep < _kaiAnimationImages.length - 1) {
+          _kaiAnimationStep++;
         }
         // Rester sur la dernière image une fois atteinte
       });
@@ -214,7 +213,7 @@ class _ChakraButtonState extends State<ChakraButton>
 
     setState(() {
       _isPulsating = true;
-      _basePulsationSize = _chakraCircleSize;
+      _basePulsationSize = _kaiCircleSize;
       _isPulsatingUp = true;
     });
 
@@ -228,14 +227,14 @@ class _ChakraButtonState extends State<ChakraButton>
       setState(() {
         if (_isPulsatingUp) {
           // Augmenter la taille
-          _chakraCircleSize += 1.5;
-          if (_chakraCircleSize >= _basePulsationSize + _pulsationAmount) {
+          _kaiCircleSize += 1.5;
+          if (_kaiCircleSize >= _basePulsationSize + _pulsationAmount) {
             _isPulsatingUp = false;
           }
         } else {
           // Diminuer la taille
-          _chakraCircleSize -= 1.5;
-          if (_chakraCircleSize <= _basePulsationSize - _pulsationAmount / 2) {
+          _kaiCircleSize -= 1.5;
+          if (_kaiCircleSize <= _basePulsationSize - _pulsationAmount / 2) {
             _isPulsatingUp = true;
           }
         }
@@ -248,8 +247,8 @@ class _ChakraButtonState extends State<ChakraButton>
     _pulsationTimer?.cancel();
     setState(() {
       _isPulsating = false;
-      _chakraCircleSize =
-          _basePulsationSize > 0 ? _basePulsationSize : _chakraCircleSize;
+      _kaiCircleSize =
+          _basePulsationSize > 0 ? _basePulsationSize : _kaiCircleSize;
     });
   }
 
@@ -273,30 +272,30 @@ class _ChakraButtonState extends State<ChakraButton>
 
       setState(() {
         // Reculer à l'étape précédente
-        if (_chakraAnimationStep > 0) {
-          _chakraAnimationStep--;
+        if (_kaiAnimationStep > 0) {
+          _kaiAnimationStep--;
 
           // Diminuer progressivement la taille du cercle
-          _chakraCircleSize =
-              (_chakraCircleSize - 10).clamp(220.0, _maxChakraCircleSize);
+          _kaiCircleSize =
+              (_kaiCircleSize - 10).clamp(220.0, _maxkaiCircleSize);
 
           // Revenir progressivement à la couleur de base
-          double reverseFactor = 1 - (_chakraAnimationStep / 4).clamp(0.0, 1.0);
-          _chakraCircleColor = Color.lerp(KaiColors.accent.withOpacity(0.6),
+          double reverseFactor = 1 - (_kaiAnimationStep / 4).clamp(0.0, 1.0);
+          _kaiCircleColor = Color.lerp(KaiColors.accent.withOpacity(0.6),
               KaiColors.primaryDark.withOpacity(0.4), reverseFactor)!;
         } else {
           // Animation terminée, on arrête le timer
           timer.cancel();
 
-          // Maintenant on peut désactiver complètement le mode chakra
-          _isChakraMode = false;
+          // Maintenant on peut désactiver complètement le mode kai
+          _iskaiMode = false;
 
           // Ne pas réinitialiser le compteur de combo ici, c'est maintenant géré par le comboResetTimer
           // _comboClicks = 0;
 
           // Réinitialiser le cercle
-          _chakraCircleSize = 220;
-          _chakraCircleColor = KaiColors.primaryDark.withOpacity(0.4);
+          _kaiCircleSize = 220;
+          _kaiCircleColor = KaiColors.primaryDark.withOpacity(0.4);
         }
       });
     });
@@ -324,14 +323,14 @@ class _ChakraButtonState extends State<ChakraButton>
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // Cercle d'énergie (chakra/XP)
+            // Cercle d'énergie (kai/XP)
             AnimatedContainer(
               duration: const Duration(milliseconds: 300),
-              width: _chakraCircleSize,
-              height: _chakraCircleSize,
+              width: _kaiCircleSize,
+              height: _kaiCircleSize,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: _chakraCircleColor,
+                color: _kaiCircleColor,
                 boxShadow: [
                   BoxShadow(
                     color: KaiColors.accent.withOpacity(
@@ -343,8 +342,8 @@ class _ChakraButtonState extends State<ChakraButton>
               ),
             ),
 
-            // Image du chakra
-            if (_isChakraMode)
+            // Image du kai
+            if (_iskaiMode)
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 width: 200,
@@ -352,15 +351,14 @@ class _ChakraButtonState extends State<ChakraButton>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   image: DecorationImage(
-                    image: AssetImage(
-                        _chakraAnimationImages[_chakraAnimationStep]),
+                    image: AssetImage(_kaiAnimationImages[_kaiAnimationStep]),
                     fit: BoxFit.cover,
                   ),
                 ),
               ),
 
             // Image du bouton - maintenant conditionnelle
-            if (!_isChakraMode)
+            if (!_iskaiMode)
               ScaleTransition(
                 scale: _scaleAnimation,
                 child: AnimatedContainer(
@@ -404,8 +402,8 @@ class _ChakraButtonState extends State<ChakraButton>
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      _formatXpForDisplay(
-                          widget.totalXP), // Formater l'XP avec max 4 chiffres
+                      _formatXpForDisplay(widget.totalXP) +
+                          ' XP', // Formater l'XP avec max 4 chiffres
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -428,14 +426,25 @@ class _ChakraButtonState extends State<ChakraButton>
   // Méthode pour formater l'XP avec un maximum de 4 chiffres
   String _formatXpForDisplay(int xp) {
     if (xp >= 1000000) {
-      // Pour les millions (M) - Exemple: 1.2M, 10M
-      return '${(xp / 1000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}M';
-    } else if (xp >= 10000) {
-      // Pour les milliers (K) sans décimale - Exemple: 10K, 999K
-      return '${(xp / 1000).floor()}K';
+      // Pour les millions (M) - Exemple: 1.156M au lieu de 1.1M
+      double value = xp / 1000000;
+      if (value >= 10) {
+        // Pour 10M et plus, afficher deux chiffres significatifs
+        return '${value.toStringAsFixed(2).replaceAll(RegExp(r'\.0+$'), '')}M';
+      } else {
+        // Pour 1M à 9.999M, afficher trois décimales
+        return '${value.toStringAsFixed(3).replaceAll(RegExp(r'\.0+$'), '')}M';
+      }
     } else if (xp >= 1000) {
-      // Pour les petits milliers avec une décimale - Exemple: 1.2K, 9.9K
-      return '${(xp / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}K';
+      // Pour les milliers (K) - Exemple: 1.156K au lieu de 1.1K
+      double value = xp / 1000;
+      if (value >= 10) {
+        // Pour 10K et plus, afficher deux chiffres significatifs
+        return '${value.toStringAsFixed(2).replaceAll(RegExp(r'\.0+$'), '')}K';
+      } else {
+        // Pour 1K à 9.999K, afficher trois décimales
+        return '${value.toStringAsFixed(3).replaceAll(RegExp(r'\.0+$'), '')}K';
+      }
     } else {
       // Valeurs inférieures à 1000 - Exemple: 1, 42, 999
       return xp.toString();

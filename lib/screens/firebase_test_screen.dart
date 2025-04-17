@@ -384,7 +384,7 @@ class TechniquesListScreen extends StatelessWidget {
         'sound': 'sounds/technique_test.mp3',
         'type': 'special',
         'effect': 'damage',
-        'chakraCost': 50,
+        'kaiCost': 50,
         'cooldown': 3,
         'isDefault': true,
       });

@@ -1,26 +1,26 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/ninja.dart';
+import '../models/kaijin.dart';
 import '../models/technique.dart';
 import '../models/sensei.dart';
 
-class NinjaService {
+class KaijinService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Créer un nouveau ninja
-  Future<Ninja> createNinja({
+  // Créer un nouveau kaijin
+  Future<Kaijin> createKaijin({
     required String userId,
     required String name,
   }) async {
     try {
-      // Créer les données du ninja
-      final ninjaData = {
+      // Créer les données du kaijin
+      final kaijinData = {
         'userId': userId,
         'name': name,
         'xp': 0,
         'level': 1,
         'strength': 10,
         'agility': 10,
-        'chakra': 10,
+        'kai': 10,
         'speed': 10,
         'defense': 10,
         'xpPerClick': 1,
@@ -37,66 +37,90 @@ class NinjaService {
         'losses': 0,
       };
 
-      // Ajouter le ninja à Firestore
-      final ninjaRef = await _firestore.collection('ninjas').add(ninjaData);
+      // Ajouter le kaijin à Firestore
+      final kaijinRef = await _firestore.collection('kaijins').add(kaijinData);
 
       // Récupérer le document créé
-      final ninjaDoc = await ninjaRef.get();
+      final kaijinDoc = await kaijinRef.get();
 
-      // Retourner le ninja
-      return Ninja.fromFirestore(ninjaDoc);
+      // Retourner le kaijin
+      return Kaijin.fromFirestore(kaijinDoc);
     } catch (e) {
-      print('Erreur lors de la création du ninja: $e');
+      print('Erreur lors de la création du kaijin: $e');
       throw e;
     }
   }
 
-  // Récupérer tous les ninjas d'un utilisateur
-  Future<List<Ninja>> getNinjasByUser(String userId) async {
+  // Récupérer le kaijin actuellement connecté pour un utilisateur
+  Future<Kaijin?> getCurrentKaijin(String userId) async {
+    try {
+      // Récupérer tous les kaijins de l'utilisateur
+      final kaijins = await getKaijinsByUser(userId);
+
+      if (kaijins.isEmpty) {
+        return null;
+      }
+
+      // Trier les kaijins par date de dernière connexion (du plus récent au plus ancien)
+      kaijins.sort((a, b) => b.lastConnected.compareTo(a.lastConnected));
+
+      // Retourner le kaijin le plus récemment connecté
+      return kaijins.first;
+    } catch (e) {
+      print('Erreur lors de la récupération du kaijin actuel: $e');
+      return null;
+    }
+  }
+
+  // Récupérer tous les kaijins d'un utilisateur
+  Future<List<Kaijin>> getKaijinsByUser(String userId) async {
     try {
       final querySnapshot = await _firestore
-          .collection('ninjas')
+          .collection('kaijins')
           .where('userId', isEqualTo: userId)
           .get();
 
-      return querySnapshot.docs.map((doc) => Ninja.fromFirestore(doc)).toList();
+      return querySnapshot.docs
+          .map((doc) => Kaijin.fromFirestore(doc))
+          .toList();
     } catch (e) {
-      print('Erreur lors de la récupération des ninjas: $e');
+      print('Erreur lors de la récupération des kaijins: $e');
       return [];
     }
   }
 
-  // Récupérer un ninja par son ID
-  Future<Ninja?> getNinjaById(String ninjaId) async {
+  // Récupérer un kaijin par son ID
+  Future<Kaijin?> getKaijinById(String kaijinId) async {
     try {
-      final ninjaDoc = await _firestore.collection('ninjas').doc(ninjaId).get();
+      final kaijinDoc =
+          await _firestore.collection('kaijins').doc(kaijinId).get();
 
-      if (ninjaDoc.exists) {
-        return Ninja.fromFirestore(ninjaDoc);
+      if (kaijinDoc.exists) {
+        return Kaijin.fromFirestore(kaijinDoc);
       }
     } catch (e) {
-      print('Erreur lors de la récupération du ninja: $e');
+      print('Erreur lors de la récupération du kaijin: $e');
     }
     return null;
   }
 
-  // Récupérer tous les ninjas classés par niveau
-  Future<List<Ninja>> getAllNinjasRankedByLevel({int limit = 20}) async {
+  // Récupérer tous les kaijins classés par niveau
+  Future<List<Kaijin>> getAllKaijinsRankedByLevel({int limit = 20}) async {
     try {
-      // Récupérer tous les ninjas triés par niveau uniquement pour éviter l'erreur d'index
+      // Récupérer tous les kaijins triés par niveau uniquement pour éviter l'erreur d'index
       final querySnapshot = await _firestore
-          .collection('ninjas')
+          .collection('kaijins')
           .orderBy('level', descending: true)
           .limit(
               limit * 2) // Récupérer plus de documents pour le tri secondaire
           .get();
 
-      // Convertir les documents en objets Ninja
-      final ninjas =
-          querySnapshot.docs.map((doc) => Ninja.fromFirestore(doc)).toList();
+      // Convertir les documents en objets Kaijin
+      final kaijins =
+          querySnapshot.docs.map((doc) => Kaijin.fromFirestore(doc)).toList();
 
-      // Trier localement par XP pour les ninjas de même niveau
-      ninjas.sort((a, b) {
+      // Trier localement par XP pour les kaijins de même niveau
+      kaijins.sort((a, b) {
         // D'abord par niveau (descendant)
         if (a.level != b.level) {
           return b.level.compareTo(a.level);
@@ -106,27 +130,27 @@ class NinjaService {
       });
 
       // Limiter le nombre de résultats après le tri
-      final limitedNinjas = ninjas.take(limit).toList();
+      final limitedKaijins = kaijins.take(limit).toList();
 
-      // Ajouter un rang à chaque ninja en fonction de sa position
-      for (int i = 0; i < limitedNinjas.length; i++) {
-        limitedNinjas[i].rank = (i + 1).toString(); // Le rang commence à 1
+      // Ajouter un rang à chaque kaijin en fonction de sa position
+      for (int i = 0; i < limitedKaijins.length; i++) {
+        limitedKaijins[i].rank = (i + 1).toString(); // Le rang commence à 1
       }
 
-      return limitedNinjas;
+      return limitedKaijins;
     } catch (e) {
-      print('Erreur lors de la récupération du classement des ninjas: $e');
+      print('Erreur lors de la récupération du classement des kaijins: $e');
       return [];
     }
   }
 
-  // Supprimer un ninja
-  Future<bool> deleteNinja(String ninjaId) async {
+  // Supprimer un kaijin
+  Future<bool> deleteKaijin(String kaijinId) async {
     try {
-      // 1. Supprimer les techniques du ninja
+      // 1. Supprimer les techniques du kaijin
       final techniqueRelations = await _firestore
-          .collection('ninjaTechniques')
-          .where('ninjaId', isEqualTo: ninjaId)
+          .collection('kaijinTechniques')
+          .where('kaijinId', isEqualTo: kaijinId)
           .get();
 
       // Utiliser un batch pour les suppressions massives
@@ -136,10 +160,10 @@ class NinjaService {
         batch.delete(doc.reference);
       }
 
-      // 2. Supprimer les senseis du ninja
+      // 2. Supprimer les senseis du kaijin
       final senseiRelations = await _firestore
-          .collection('ninjaSenseis')
-          .where('ninjaId', isEqualTo: ninjaId)
+          .collection('kaijinSenseis')
+          .where('kaijinId', isEqualTo: kaijinId)
           .get();
 
       for (var doc in senseiRelations.docs) {
@@ -149,51 +173,51 @@ class NinjaService {
       // Exécuter le premier batch
       await batch.commit();
 
-      // 3. Supprimer le ninja lui-même
-      await _firestore.collection('ninjas').doc(ninjaId).delete();
+      // 3. Supprimer le kaijin lui-même
+      await _firestore.collection('kaijins').doc(kaijinId).delete();
 
-      print('Ninja et ses relations supprimés avec succès');
+      print('Kaijin et ses relations supprimés avec succès');
       return true;
     } catch (e) {
-      print('Erreur lors de la suppression du ninja: $e');
+      print('Erreur lors de la suppression du kaijin: $e');
       return false;
     }
   }
 
-  // Mettre à jour un ninja
-  Future<void> updateNinja(Ninja ninja) async {
+  // Mettre à jour un kaijin
+  Future<void> updateKaijin(Kaijin kaijin) async {
     try {
       await _firestore
-          .collection('ninjas')
-          .doc(ninja.id)
-          .update(ninja.toFirestore());
+          .collection('kaijins')
+          .doc(kaijin.id)
+          .update(kaijin.toFirestore());
     } catch (e) {
-      print('Erreur lors de la mise à jour du ninja: $e');
+      print('Erreur lors de la mise à jour du kaijin: $e');
       throw e;
     }
   }
 
   // Ajouter de l'XP
-  Future<void> addXp(String ninjaId, int amount) async {
+  Future<void> addXp(String kaijinId, int amount) async {
     try {
       await _firestore.runTransaction((transaction) async {
-        final ninjaRef = _firestore.collection('ninjas').doc(ninjaId);
-        final ninjaDoc = await transaction.get(ninjaRef);
+        final kaijinRef = _firestore.collection('kaijins').doc(kaijinId);
+        final kaijinDoc = await transaction.get(kaijinRef);
 
-        if (ninjaDoc.exists) {
-          final currentXp = ninjaDoc.data()?['xp'] as int? ?? 0;
+        if (kaijinDoc.exists) {
+          final currentXp = kaijinDoc.data()?['xp'] as int? ?? 0;
           final newXp = currentXp + amount;
 
           // Mise à jour de l'XP
-          transaction.update(ninjaRef, {'xp': newXp});
+          transaction.update(kaijinRef, {'xp': newXp});
 
           // Vérifier si passage de niveau
-          final currentLevel = ninjaDoc.data()?['level'] as int? ?? 1;
+          final currentLevel = kaijinDoc.data()?['level'] as int? ?? 1;
           final xpNeededForNextLevel = currentLevel * 100; // Formule simple
 
           if (newXp >= xpNeededForNextLevel) {
             // Passage de niveau
-            transaction.update(ninjaRef, {
+            transaction.update(kaijinRef, {
               'level': currentLevel + 1,
               'xp': newXp - xpNeededForNextLevel
             });
@@ -206,12 +230,12 @@ class NinjaService {
     }
   }
 
-  // Récupérer les techniques d'un ninja
-  Future<List<Technique>> getNinjaTechniques(String ninjaId) async {
+  // Récupérer les techniques d'un kaijin
+  Future<List<Technique>> getKaijinTechniques(String kaijinId) async {
     try {
       final querySnapshot = await _firestore
-          .collection('ninjaTechniques')
-          .where('ninjaId', isEqualTo: ninjaId)
+          .collection('kaijinTechniques')
+          .where('kaijinId', isEqualTo: kaijinId)
           .get();
 
       final techniqueIds = querySnapshot.docs
@@ -246,13 +270,13 @@ class NinjaService {
     }
   }
 
-  // Ajouter une technique à un ninja
-  Future<void> addTechniqueToNinja(String ninjaId, String techniqueId) async {
+  // Ajouter une technique à un kaijin
+  Future<void> addTechniqueToKaijin(String kaijinId, String techniqueId) async {
     try {
       // Vérifier si la relation existe déjà
       final querySnapshot = await _firestore
-          .collection('ninjaTechniques')
-          .where('ninjaId', isEqualTo: ninjaId)
+          .collection('kaijinTechniques')
+          .where('kaijinId', isEqualTo: kaijinId)
           .where('techniqueId', isEqualTo: techniqueId)
           .get();
 
@@ -263,13 +287,13 @@ class NinjaService {
             querySnapshot.docs.first.data()['level'] as int? ?? 0;
 
         await _firestore
-            .collection('ninjaTechniques')
+            .collection('kaijinTechniques')
             .doc(docId)
             .update({'level': currentLevel + 1});
       } else {
         // Ajouter la nouvelle technique
-        await _firestore.collection('ninjaTechniques').add({
-          'ninjaId': ninjaId,
+        await _firestore.collection('kaijinTechniques').add({
+          'kaijinId': kaijinId,
           'techniqueId': techniqueId,
           'level': 1,
           'acquiredAt': Timestamp.now(),
@@ -281,12 +305,12 @@ class NinjaService {
     }
   }
 
-  // Récupérer les senseis d'un ninja
-  Future<List<Sensei>> getNinjaSenseis(String ninjaId) async {
+  // Récupérer les senseis d'un kaijin
+  Future<List<Sensei>> getKaijinSenseis(String kaijinId) async {
     try {
       final querySnapshot = await _firestore
-          .collection('ninjaSenseis')
-          .where('ninjaId', isEqualTo: ninjaId)
+          .collection('kaijinSenseis')
+          .where('kaijinId', isEqualTo: kaijinId)
           .get();
 
       final senseiIds = querySnapshot.docs
@@ -321,13 +345,13 @@ class NinjaService {
     }
   }
 
-  // Ajouter un sensei à un ninja
-  Future<void> addSenseiToNinja(String ninjaId, String senseiId) async {
+  // Ajouter un sensei à un kaijin
+  Future<void> addSenseiToKaijin(String kaijinId, String senseiId) async {
     try {
       // Vérifier si la relation existe déjà
       final querySnapshot = await _firestore
-          .collection('ninjaSenseis')
-          .where('ninjaId', isEqualTo: ninjaId)
+          .collection('kaijinSenseis')
+          .where('kaijinId', isEqualTo: kaijinId)
           .where('senseiId', isEqualTo: senseiId)
           .get();
 
@@ -338,13 +362,13 @@ class NinjaService {
             querySnapshot.docs.first.data()['quantity'] as int? ?? 0;
 
         await _firestore
-            .collection('ninjaSenseis')
+            .collection('kaijinSenseis')
             .doc(docId)
             .update({'quantity': currentQuantity + 1});
       } else {
         // Ajouter le nouveau sensei
-        await _firestore.collection('ninjaSenseis').add({
-          'ninjaId': ninjaId,
+        await _firestore.collection('kaijinSenseis').add({
+          'kaijinId': kaijinId,
           'senseiId': senseiId,
           'level': 1,
           'quantity': 1,
@@ -357,11 +381,11 @@ class NinjaService {
   }
 
   // Améliorer un sensei
-  Future<void> upgradeSensei(String ninjaId, String senseiId) async {
+  Future<void> upgradeSensei(String kaijinId, String senseiId) async {
     try {
       final querySnapshot = await _firestore
-          .collection('ninjaSenseis')
-          .where('ninjaId', isEqualTo: ninjaId)
+          .collection('kaijinSenseis')
+          .where('kaijinId', isEqualTo: kaijinId)
           .where('senseiId', isEqualTo: senseiId)
           .get();
 
@@ -371,7 +395,7 @@ class NinjaService {
             querySnapshot.docs.first.data()['level'] as int? ?? 1;
 
         await _firestore
-            .collection('ninjaSenseis')
+            .collection('kaijinSenseis')
             .doc(docId)
             .update({'level': currentLevel + 1});
       }
@@ -381,28 +405,28 @@ class NinjaService {
     }
   }
 
-  // Mettre à jour le niveau d'une technique d'un ninja
-  Future<void> updateNinjaTechnique(
-      String ninjaId, String techniqueId, int level) async {
+  // Mettre à jour le niveau d'une technique du kaijin
+  Future<void> updateKaijinTechnique(
+      String kaijinId, String techniqueId, int level) async {
     try {
       // Vérifier si la relation existe déjà
       final querySnapshot = await _firestore
-          .collection('ninjaTechniques')
-          .where('ninjaId', isEqualTo: ninjaId)
+          .collection('kaijinTechniques')
+          .where('kaijinId', isEqualTo: kaijinId)
           .where('techniqueId', isEqualTo: techniqueId)
           .get();
 
       if (querySnapshot.docs.isNotEmpty) {
-        // La technique existe déjà, mettre à jour son niveau
+        // La technique existe, mettre à jour son niveau
         final docId = querySnapshot.docs.first.id;
         await _firestore
-            .collection('ninjaTechniques')
+            .collection('kaijinTechniques')
             .doc(docId)
             .update({'level': level});
       } else {
-        // Ajouter la nouvelle technique avec le niveau spécifié
-        await _firestore.collection('ninjaTechniques').add({
-          'ninjaId': ninjaId,
+        // Créer une nouvelle relation avec le niveau spécifié
+        await _firestore.collection('kaijinTechniques').add({
+          'kaijinId': kaijinId,
           'techniqueId': techniqueId,
           'level': level,
           'acquiredAt': Timestamp.now(),
@@ -411,36 +435,6 @@ class NinjaService {
     } catch (e) {
       print('Erreur lors de la mise à jour de la technique: $e');
       throw e;
-    }
-  }
-
-  Future<void> createNinjaForNewUser(String userId, String username) async {
-    // Vérifier si l'utilisateur a déjà un ninja
-    final existingNinjas = await getNinjasByUser(userId);
-
-    if (existingNinjas.isEmpty) {
-      // Créer un nouveau ninja par défaut
-      await createNinja(
-        userId: userId,
-        name: username,
-      );
-
-      // Récupérer les techniques par défaut
-      final defaultTechniques = await _firestore
-          .collection('techniques')
-          .where('isDefault', isEqualTo: true)
-          .limit(1)
-          .get();
-
-      if (defaultTechniques.docs.isNotEmpty) {
-        final techniqueId = defaultTechniques.docs[0].id;
-        final ninja = await getNinjasByUser(userId);
-
-        if (ninja.isNotEmpty) {
-          // Ajouter la technique au ninja
-          await addTechniqueToNinja(ninja[0].id, techniqueId);
-        }
-      }
     }
   }
 }

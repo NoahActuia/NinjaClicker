@@ -1,9 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/resonance.dart';
-import '../models/ninja.dart';
+import '../models/kaijin.dart';
+import '../models/kaijin_resonance.dart';
+import 'audio_service.dart';
 
 class ResonanceService {
+  // Singleton pattern
+  static final ResonanceService _instance = ResonanceService._internal();
+  factory ResonanceService() => _instance;
+  ResonanceService._internal();
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final AudioService _audioService = AudioService();
 
   // Récupérer toutes les Résonances disponibles
   Future<List<Resonance>> getAllResonances() async {
@@ -16,13 +24,13 @@ class ResonanceService {
     }
   }
 
-  // Récupérer les Résonances d'un ninja spécifique
-  Future<List<Resonance>> getNinjaResonances(String ninjaId) async {
+  // Récupérer les Résonances d'un kaijin spécifique
+  Future<List<Resonance>> getKaijinResonances(String kaijinId) async {
     try {
-      // Récupérer la relation ninja-résonance
+      // Récupérer la relation kaijin-résonance
       final relationSnapshot = await _firestore
-          .collection('ninjaResonances')
-          .where('ninjaId', isEqualTo: ninjaId)
+          .collection('kaijinResonances')
+          .where('kaijinId', isEqualTo: kaijinId)
           .get();
 
       if (relationSnapshot.docs.isEmpty) {
@@ -58,25 +66,90 @@ class ResonanceService {
         return resonance;
       }).toList();
     } catch (e) {
-      print('Erreur lors du chargement des Résonances du ninja: $e');
+      print('Erreur lors du chargement des Résonances du kaijin: $e');
       return [];
     }
   }
 
+  // Débloquer une Résonance avec gestion d'XP
+  Future<bool> unlockResonanceWithXp(Kaijin kaijin, Resonance resonance,
+      int totalXP, Function(int) updateXP) async {
+    if (totalXP < resonance.xpCostToUnlock) return false;
+
+    updateXP(-resonance.xpCostToUnlock);
+
+    try {
+      final success = await unlockResonance(kaijin.id, resonance);
+
+      if (success) {
+        _audioService.playSound('unlock.mp3');
+        return true;
+      } else {
+        // En cas d'échec, rembourser l'XP dépensé
+        updateXP(resonance.xpCostToUnlock);
+        return false;
+      }
+    } catch (e) {
+      print('Erreur lors du déblocage de la résonance: $e');
+      // Rembourser l'XP en cas d'erreur
+      updateXP(resonance.xpCostToUnlock);
+      return false;
+    }
+  }
+
+  // Améliorer une Résonance avec gestion d'XP
+  Future<bool> upgradeResonanceWithXp(Kaijin kaijin, Resonance resonance,
+      int totalXP, Function(int) updateXP) async {
+    if (!resonance.isUnlocked) return false;
+
+    if (resonance.linkLevel >= resonance.maxLinkLevel) {
+      print(
+          'Cette résonance a déjà atteint son niveau maximum (${resonance.maxLinkLevel})');
+      return false;
+    }
+
+    final upgradeCost = resonance.getUpgradeCost();
+    if (totalXP < upgradeCost) return false;
+
+    updateXP(-upgradeCost);
+    int originalLevel = resonance.linkLevel;
+    resonance.linkLevel++;
+
+    try {
+      final success = await upgradeResonanceLink(kaijin.id, resonance);
+
+      if (success) {
+        _audioService.playSound('upgrade.mp3');
+        return true;
+      } else {
+        // En cas d'échec, rembourser l'XP dépensé et restaurer le niveau
+        updateXP(upgradeCost);
+        resonance.linkLevel = originalLevel;
+        return false;
+      }
+    } catch (e) {
+      print('Erreur lors de l\'amélioration de la résonance: $e');
+      // Rembourser l'XP et restaurer le niveau en cas d'erreur
+      updateXP(upgradeCost);
+      resonance.linkLevel = originalLevel;
+      return false;
+    }
+  }
+
   // Débloquer une nouvelle Résonance pour un ninja
-  Future<bool> unlockResonance(String ninjaId, Resonance resonance) async {
+  Future<bool> unlockResonance(String kaijinId, Resonance resonance) async {
     try {
       // Vérifier si la relation existe déjà
       final relationQuery = await _firestore
-          .collection('ninjaResonances')
-          .where('ninjaId', isEqualTo: ninjaId)
+          .collection('kaijinResonances')
+          .where('kaijinId', isEqualTo: kaijinId)
           .where('resonanceId', isEqualTo: resonance.id)
           .get();
 
       if (relationQuery.docs.isNotEmpty) {
         // Mettre à jour la relation existante
         await _firestore
-            .collection('ninjaResonances')
+            .collection('kaijinResonances')
             .doc(relationQuery.docs.first.id)
             .update({
           'isUnlocked': true,
@@ -84,8 +157,8 @@ class ResonanceService {
         });
       } else {
         // Créer une nouvelle relation
-        await _firestore.collection('ninjaResonances').add({
-          'ninjaId': ninjaId,
+        await _firestore.collection('kaijinResonances').add({
+          'kaijinId': kaijinId,
           'resonanceId': resonance.id,
           'linkLevel': 1,
           'isUnlocked': true,
@@ -100,17 +173,18 @@ class ResonanceService {
   }
 
   // Améliorer le niveau de lien d'une Résonance
-  Future<bool> upgradeResonanceLink(String ninjaId, Resonance resonance) async {
+  Future<bool> upgradeResonanceLink(
+      String kaijinId, Resonance resonance) async {
     try {
       // Trouver la relation
       final relationQuery = await _firestore
-          .collection('ninjaResonances')
-          .where('ninjaId', isEqualTo: ninjaId)
+          .collection('kaijinResonances')
+          .where('kaijinId', isEqualTo: kaijinId)
           .where('resonanceId', isEqualTo: resonance.id)
           .get();
 
       if (relationQuery.docs.isEmpty) {
-        print('Relation ninja-résonance non trouvée');
+        print('Relation kaijin-résonance non trouvée');
         return false;
       }
 
@@ -149,7 +223,7 @@ class ResonanceService {
 
       // Mettre à jour le niveau de lien
       await _firestore
-          .collection('ninjaResonances')
+          .collection('kaijinResonances')
           .doc(relationQuery.docs.first.id)
           .update({
         'linkLevel': newLevel,
@@ -162,179 +236,124 @@ class ResonanceService {
     }
   }
 
-  // Calculer l'XP passive totale par seconde pour un ninja
-  Future<double> calculateTotalPassiveXpPerSecond(String ninjaId) async {
+  // Calculer l'XP passive totale par seconde pour un kaijin
+  Future<double> calculateTotalPassiveXpPerSecond(String kaijinId) async {
     try {
-      final resonances = await getNinjaResonances(ninjaId);
-      double totalXpPerSecond = 0;
+      final resonances = await getKaijinResonances(kaijinId);
+      double totalXpPerSecond = 0.0;
 
       for (var resonance in resonances) {
-        if (resonance.isUnlocked) {
+        if (resonance.isUnlocked && resonance.linkLevel > 0) {
           totalXpPerSecond += resonance.getXpPerSecond();
         }
       }
 
       return totalXpPerSecond;
     } catch (e) {
-      print('Erreur lors du calcul de l\'XP passive: $e');
-      return 0;
+      print('Erreur lors du calcul de l\'XP passive totale: $e');
+      return 0.0;
     }
   }
 
-  // Méthode maintenue pour compatibilité
-  Future<int> calculateTotalPassiveXpPerHour(String ninjaId) async {
+  // Calculer l'XP hors-ligne pour un kaijin
+  Future<int> calculateOfflineXp(
+      String kaijinId, DateTime lastConnected) async {
     try {
-      double xpPerSecond = await calculateTotalPassiveXpPerSecond(ninjaId);
-      return (xpPerSecond * 3600).ceil(); // Convertir en XP/heure
-    } catch (e) {
-      print('Erreur lors du calcul de l\'XP passive par heure: $e');
-      return 0;
-    }
-  }
+      final xpPerSecond = await calculateTotalPassiveXpPerSecond(kaijinId);
 
-  // Calculer l'XP gagnée depuis la dernière connexion
-  Future<int> calculateOfflineXp(String ninjaId, DateTime lastConnected) async {
-    try {
-      final resonances = await getNinjaResonances(ninjaId);
-      if (resonances.isEmpty) return 0;
+      if (xpPerSecond <= 0) return 0;
 
-      // Calculer le temps écoulé en secondes depuis la dernière connexion
       final now = DateTime.now();
-      final duration = now.difference(lastConnected);
-      final secondsElapsed = duration.inSeconds;
+      final difference = now.difference(lastConnected);
 
-      // Calculer l'XP totale par seconde
-      double totalXpPerSecond = 0;
-      for (var resonance in resonances) {
-        if (resonance.isUnlocked) {
-          totalXpPerSecond += resonance.getXpPerSecond();
-        }
-      }
+      // Limiter à 24 heures maximum
+      final seconds = min(difference.inSeconds, 24 * 60 * 60);
 
-      // Calculer l'XP gagnée pendant l'absence
-      return (totalXpPerSecond * secondsElapsed).ceil();
+      return (xpPerSecond * seconds).toInt();
     } catch (e) {
       print('Erreur lors du calcul de l\'XP hors-ligne: $e');
       return 0;
     }
   }
 
-  // Initialiser les Résonances par défaut dans la base de données
+  // Initialiser les résonances par défaut
   Future<void> initDefaultResonances() async {
     try {
-      // Vérifier si des Résonances existent déjà
-      final existing = await _firestore.collection('resonances').get();
-      if (existing.docs.isNotEmpty) {
-        print(
-            'Les Résonances sont déjà initialisées (${existing.docs.length} trouvées)');
+      // Vérifier si les résonances existent déjà
+      final existingResonances = await getAllResonances();
+      if (existingResonances.isNotEmpty) {
+        print('Les résonances existent déjà, pas besoin de les initialiser');
         return;
       }
 
-      // Les Résonances par défaut à créer avec un équilibrage beaucoup plus difficile
+      // Liste des résonances par défaut
       final defaultResonances = [
         {
-          'name': 'Éclat Résonant',
+          'name': 'Résonance du Flux',
           'description':
-              'Premier fragment détecté. Flux d\'énergie très faible mais persistant. Cœur du système de Résonance Kai.',
-          'xpPerSecond': 0.125, // Réduit à 0.125 XP/s (0.45 XP/h)
-          'xpCostToUnlock': 500, // Augmenté de 250 à 500
-          'xpCostToUpgradeLink': 600, // Augmenté de 150 à 600
-          'maxLinkLevel': 3
+              'Établit une connexion avec le Flux du Kai, générant un faible flux d\'XP passive.',
+          'xpPerSecond': 0.5,
+          'xpCostToUnlock': 100,
+          'baseUpgradeCost': 50,
+          'maxLinkLevel': 10,
+          'affinity': 'Flux',
         },
         {
-          'name': 'Pierre d\'Éveil',
+          'name': 'Écho de la Fracture',
           'description':
-              'Cristal fissuré captant le Kai environnant. Nécessite une focalisation constante pour maintenir sa stabilité.',
-          'xpPerSecond': 0.25, // Réduit de 1.2 à 0.25 XP/s (0.9 XP/h)
-          'xpCostToUnlock': 2500, // Augmenté de 600 à 2500
-          'xpCostToUpgradeLink': 1500, // Augmenté de 300 à 1500
-          'maxLinkLevel': 4
+              'Crée un lien avec les fissures du Kai, augmentant légèrement la génération d\'XP par clic.',
+          'xpPerSecond': 0.3,
+          'xpCostToUnlock': 250,
+          'baseUpgradeCost': 100,
+          'maxLinkLevel': 8,
+          'affinity': 'Fracture',
         },
         {
-          'name': 'Totem Harmonié',
+          'name': 'Cognition du Sceau',
           'description':
-              'Structure de méditation ancienne qui amplifie la résonance. Le Kai ambiant est canalisé à travers ses gravures.',
-          'xpPerSecond': 0.5, // Réduit de 2.5 à 0.5 XP/s (1.8 XP/h)
-          'xpCostToUnlock': 7500, // Augmenté de 1500 à 7500
-          'xpCostToUpgradeLink': 3500, // Augmenté de 750 à 3500
-          'maxLinkLevel': 5
+              'Forme un lien mental avec les Sceaux anciens, permettant une meilleure compréhension du Kai.',
+          'xpPerSecond': 0.7,
+          'xpCostToUnlock': 500,
+          'baseUpgradeCost': 150,
+          'maxLinkLevel': 6,
+          'affinity': 'Sceau',
         },
         {
-          'name': 'Sceau Symbiotique',
+          'name': 'Pulsation de la Dérive',
           'description':
-              'Lien stable et permanent avec une source puissante du Kai. Fusion partielle entre le Kaijin et l\'énergie primordiale.',
-          'xpPerSecond': 1.0, // Réduit de 5.0 à 1.0 XP/s (3.6 XP/h)
-          'xpCostToUnlock': 20000, // Augmenté de 3500 à 20000
-          'xpCostToUpgradeLink': 10000, // Augmenté de 1500 à 10000
-          'maxLinkLevel': 6
+              'S\'accorde à la Dérive du Kai pour générer une quantité modérée d\'XP au fil du temps.',
+          'xpPerSecond': 1.2,
+          'xpCostToUnlock': 1000,
+          'baseUpgradeCost': 300,
+          'maxLinkLevel': 5,
+          'affinity': 'Dérive',
         },
         {
-          'name': 'Nexus Personnel',
+          'name': 'Impact de la Frappe',
           'description':
-              'Le Kaijin devient lui-même une source de Kai passive, générant un flux continu d\'énergie. Transcendance des limites physiques.',
-          'xpPerSecond': 2.0, // Réduit de 10.0 à 2.0 XP/s (7.2 XP/h)
-          'xpCostToUnlock': 50000, // Augmenté de 8000 à 50000
-          'xpCostToUpgradeLink': 25000, // Augmenté de 3000 à 25000
-          'maxLinkLevel': 7
+              'Renforce la connexion avec l\'aspect Frappe du Kai, augmentant l\'efficacité des clics.',
+          'xpPerSecond': 0.2,
+          'xpCostToUnlock': 750,
+          'baseUpgradeCost': 250,
+          'maxLinkLevel': 7,
+          'affinity': 'Frappe',
         },
-        // Nouvelles résonances de très haut niveau
-        {
-          'name': 'Cristal de Convergence',
-          'description':
-              'Artefact rarissime catalysant les courants du Kai dans un vortex de puissance. Requiert une maîtrise exceptionnelle pour stabiliser son flux.',
-          'xpPerSecond': 4.0, // 14.4 XP/h
-          'xpCostToUnlock': 125000,
-          'xpCostToUpgradeLink': 60000,
-          'maxLinkLevel': 8
-        },
-        {
-          'name': 'Matrice d\'Ascension',
-          'description':
-              'Réseau complexe de liaisons Kai permettant d\'atteindre un état d\'harmonie parfaite. Les fluctuations dimensionnelles sont domptées et canalisées.',
-          'xpPerSecond': 8.0, // 28.8 XP/h
-          'xpCostToUnlock': 300000,
-          'xpCostToUpgradeLink': 150000,
-          'maxLinkLevel': 9
-        },
-        {
-          'name': 'Cœur du Kairos',
-          'description':
-              'Le point de convergence ultime entre l\'âme du Kaijin et l\'essence même du temps fractionné. Seuls les plus grands maîtres peuvent l\'atteindre.',
-          'xpPerSecond': 16.0, // 57.6 XP/h
-          'xpCostToUnlock': 750000,
-          'xpCostToUpgradeLink': 350000,
-          'maxLinkLevel': 10
-        }
       ];
 
-      // Ajouter les Résonances à Firestore
+      // Ajouter les résonances à Firestore
       for (var resonance in defaultResonances) {
         await _firestore.collection('resonances').add(resonance);
       }
 
-      print('Résonances par défaut initialisées avec succès');
+      print(
+          '${defaultResonances.length} résonances par défaut ont été initialisées');
     } catch (e) {
-      print('Erreur lors de l\'initialisation des Résonances par défaut: $e');
+      print('Erreur lors de l\'initialisation des résonances par défaut: $e');
     }
   }
+}
 
-  // Mettre à jour le Ninja avec l'XP passive calculée
-  Future<void> updateNinjaWithPassiveXp(Ninja ninja) async {
-    try {
-      final totalXpPerSecond = await calculateTotalPassiveXpPerSecond(ninja.id);
-
-      // Convertir en entier avec ceil() pour Firebase puisque passiveXp est un int dans le modèle Ninja
-      final passiveXpInt = totalXpPerSecond;
-
-      await _firestore.collection('ninjas').doc(ninja.id).update({
-        'passiveXp': passiveXpInt,
-        'lastConnected': DateTime.now().millisecondsSinceEpoch
-      });
-
-      // Mettre à jour l'objet ninja local également
-      ninja.passiveXp = passiveXpInt;
-    } catch (e) {
-      print('Erreur lors de la mise à jour de l\'XP passive du ninja: $e');
-    }
-  }
+// Fonction utilitaire min
+int min(int a, int b) {
+  return a < b ? a : b;
 }

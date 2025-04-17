@@ -34,7 +34,7 @@ class TechniqueList extends StatelessWidget {
       child: Column(
         children: [
           Text(
-            'Techniques Ninja',
+            'Techniques Kaijin',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -92,23 +92,46 @@ class TechniqueCard extends StatelessWidget {
           children: [
             Text(technique.description),
             Text(
-              'Niveau: ${technique.niveau}',
+              'Niveau: ${technique.level}',
               style: TextStyle(
-                color: Colors.blue[700],
+                color: KaiColors.textSecondary,
                 fontWeight: FontWeight.bold,
               ),
             ),
             Text(
-              'Production: ${technique.powerPerSecond * technique.niveau}/sec',
+              'Dégâts: ${technique.damage * technique.level}',
               style: TextStyle(
-                color: Colors.green[700],
+                color: KaiColors.accent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (technique.condition_generated != null)
+              Text(
+                'Effet: ${technique.condition_generated}',
+                style: TextStyle(
+                  color: KaiColors.success,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            if (technique.trigger_condition != null)
+              Text(
+                'Déclencheur: ${technique.trigger_condition}',
+                style: TextStyle(
+                  color: KaiColors.sealColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            Text(
+              'Temps de recharge: ${technique.cooldown} tours',
+              style: TextStyle(
+                color: KaiColors.textSecondary,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ],
         ),
         trailing: ElevatedButton(
-          onPressed: puissance >= technique.cost
+          onPressed: puissance >= technique.cost_kai
               ? () => onAcheterTechnique(technique)
               : null,
           style: ElevatedButton.styleFrom(
@@ -117,7 +140,7 @@ class TechniqueCard extends StatelessWidget {
             disabledBackgroundColor: Colors.grey[400],
           ),
           child: Text(
-            '${technique.cost}',
+            '${technique.cost_kai}',
             style: const TextStyle(
               fontWeight: FontWeight.bold,
             ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
+import 'dart:math';
 // Import conditionnel pour le web
 // ignore: unused_import
 import 'welcome_screen_web.dart'
@@ -11,9 +12,10 @@ import 'game_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_test_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../services/ninja_service.dart';
-import '../models/ninja.dart';
+import '../services/kaijin_service.dart';
+import '../models/kaijin.dart';
 import 'intro_video_screen.dart';
+import '../styles/kai_colors.dart' as styles;
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -24,14 +26,14 @@ class WelcomeScreen extends StatefulWidget {
 
 class _WelcomeScreenState extends State<WelcomeScreen> {
   final TextEditingController _nameController = TextEditingController();
-  List<Ninja> _playerNinjas = [];
+  List<Kaijin> _playerKaijins = [];
   bool _isLoading = true;
-  final NinjaService _ninjaService = NinjaService();
+  final KaijinService _kaijinService = KaijinService();
 
   @override
   void initState() {
     super.initState();
-    _loadNinjas();
+    _loadKaijins();
   }
 
   @override
@@ -40,8 +42,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     super.dispose();
   }
 
-  // Charger les ninjas de l'utilisateur courant
-  Future<void> _loadNinjas() async {
+  // Charger les kaijins de l'utilisateur courant
+  Future<void> _loadKaijins() async {
     setState(() {
       _isLoading = true;
     });
@@ -49,10 +51,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        final ninjas = await _ninjaService.getNinjasByUser(user.uid);
+        // Note: ici nous avons besoin de TOUS les kaijins de l'utilisateur pour afficher la liste,
+        // et non pas seulement du kaijin actif, donc nous utilisons getKaijinsByUser
+        final kaijins = await _kaijinService.getKaijinsByUser(user.uid);
 
         setState(() {
-          _playerNinjas = ninjas;
+          _playerKaijins = kaijins;
           _isLoading = false;
         });
       } else {
@@ -61,7 +65,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         });
       }
     } catch (e) {
-      print("Erreur lors du chargement des ninjas: $e");
+      print("Erreur lors du chargement des kaijins: $e");
       setState(() {
         _isLoading = false;
       });
@@ -74,17 +78,17 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text(
+          title: Text(
             'Nouvelle Partie',
             style: TextStyle(
-              color: KaiColors.background,
+              color: styles.KaiColors.background,
               fontWeight: FontWeight.bold,
             ),
           ),
           content: TextField(
             controller: _nameController,
             decoration: const InputDecoration(
-              labelText: 'Entrez votre nom de ninja',
+              labelText: 'Entrez votre nom de Kaijin',
               border: OutlineInputBorder(),
             ),
           ),
@@ -100,11 +104,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               onPressed: () {
                 if (_nameController.text.trim().isNotEmpty) {
                   Navigator.pop(context);
-                  _createNinjaAndStartGame(_nameController.text.trim());
+                  _createKaijinAndStartGame(_nameController.text.trim());
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: KaiColors.background,
+                backgroundColor: styles.KaiColors.background,
               ),
               child: const Text(
                 'Commencer',
@@ -117,18 +121,18 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
-  // Créer un nouveau ninja et démarrer le jeu
-  Future<void> _createNinjaAndStartGame(String playerName) async {
+  // Créer un nouveau kaijin et démarrer le jeu
+  Future<void> _createKaijinAndStartGame(String playerName) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       try {
-        // Créer un nouveau ninja dans Firebase
-        final ninja = await _ninjaService.createNinja(
+        // Créer un nouveau kaijin dans Firebase
+        final kaijin = await _kaijinService.createKaijin(
           userId: user.uid,
           name: playerName,
         );
 
-        // Démarrer la vidéo d'introduction puis le jeu avec ce ninja
+        // Démarrer la vidéo d'introduction puis le jeu avec ce kaijin
         if (mounted) {
           Navigator.pushReplacement(
             context,
@@ -140,10 +144,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           );
         }
       } catch (e) {
-        print("Erreur lors de la création du ninja: $e");
+        print("Erreur lors de la création du kaijin: $e");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Erreur lors de la création du ninja: $e"),
+            content: Text("Erreur lors de la création du kaijin: $e"),
             backgroundColor: Colors.red,
           ),
         );
@@ -151,142 +155,60 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Vous devez être connecté pour créer un ninja"),
+          content: Text("Vous devez être connecté pour créer un kaijin"),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  // Charger un ninja et démarrer le jeu
-  void _loadNinjaAndStartGame(Ninja ninja) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => GameScreen(
-          playerName: ninja.name,
-          savedGame: null, // Le ninja sera chargé directement dans GameScreen
-        ),
-      ),
-    );
-  }
+  // Charger un kaijin et démarrer le jeu
+  Future<void> _loadKaijinAndStartGame(Kaijin kaijin) async {
+    try {
+      // Sauvegarder l'ancienne valeur de lastConnected dans previousLastConnected
+      kaijin.previousLastConnected = kaijin.lastConnected;
 
-  // Construire la liste des ninjas
-  Widget _buildNinjasList() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+      // Mettre à jour lastConnected avec la date actuelle
+      kaijin.lastConnected = DateTime.now();
 
-    if (_playerNinjas.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'Aucun ninja disponible',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _showNewGameDialog,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: KaiColors.background,
-              ),
-              child: const Text('Créer un ninja'),
-            ),
-          ],
-        ),
-      );
-    }
+      // Sauvegarder les modifications
+      await _kaijinService.updateKaijin(kaijin);
+      print('Dates de connexion mises à jour pour ${kaijin.name}:');
+      print('- previousLastConnected: ${kaijin.previousLastConnected}');
+      print('- lastConnected: ${kaijin.lastConnected}');
 
-    return ListView.builder(
-      shrinkWrap: true,
-      itemCount: _playerNinjas.length,
-      itemBuilder: (context, index) {
-        final ninja = _playerNinjas[index];
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-          child: ListTile(
-            leading: const CircleAvatar(
-              backgroundColor: KaiColors.background,
-              child: Icon(Icons.person, color: Colors.white),
-            ),
-            title: Text(
-              ninja.name,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text(
-              'Niveau ${ninja.level} • ${ninja.xp} XP',
-              style: const TextStyle(fontSize: 12),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.play_arrow, color: Colors.green),
-                  onPressed: () => _loadNinjaAndStartGame(ninja),
-                  tooltip: 'Jouer',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () => _confirmDeleteNinja(ninja),
-                  tooltip: 'Supprimer',
-                ),
-              ],
+      // Naviguer vers l'écran de jeu
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => GameScreen(
+              playerName: kaijin.name,
+              savedGame:
+                  null, // Le kaijin sera chargé directement dans GameScreen
+              resetState:
+                  true, // Indiquer qu'il faut réinitialiser l'état du jeu quand on change de kaijin
             ),
           ),
         );
-      },
-    );
-  }
+      }
+    } catch (e) {
+      print('Erreur lors de la mise à jour des dates de connexion: $e');
 
-  // Confirmation de suppression d'un ninja
-  void _confirmDeleteNinja(Ninja ninja) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Supprimer le ninja'),
-          content: Text('Êtes-vous sûr de vouloir supprimer ${ninja.name} ?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Annuler'),
+      // En cas d'erreur, continuer quand même vers l'écran de jeu
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => GameScreen(
+              playerName: kaijin.name,
+              savedGame: null,
+              resetState: true,
             ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                // Supprimer le ninja
-                final success = await _ninjaService.deleteNinja(ninja.id);
-                if (success && mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${ninja.name} a été supprimé'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                  _loadNinjas(); // Recharger la liste
-                } else if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Erreur lors de la suppression du ninja'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-              ),
-              child: const Text('Supprimer'),
-            ),
-          ],
+          ),
         );
-      },
-    );
+      }
+    }
   }
 
   @override
@@ -358,8 +280,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              KaiColors.background.withOpacity(0.9),
-                              KaiColors.background.withOpacity(0.7),
+                              styles.KaiColors.background.withOpacity(0.9),
+                              styles.KaiColors.background.withOpacity(0.7),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(20),
@@ -378,8 +300,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ),
                 const SizedBox(height: 40),
 
-                // Affichage des ninjas existants
-                if (_playerNinjas.isNotEmpty) ...[
+                // Affichage des kaijins existants
+                if (_playerKaijins.isNotEmpty) ...[
                   Container(
                     width: 300,
                     padding: const EdgeInsets.all(15),
@@ -396,19 +318,30 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     ),
                     child: Column(
                       children: [
-                        Text(
-                          'Personnages disponibles',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: KaiColors.kaiNeutral,
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Personnages disponibles',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: styles.KaiColors.accent,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              '(${_playerKaijins.length})',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: styles.KaiColors.accent.withOpacity(0.7),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 10),
-                        ...List.generate(
-                          _playerNinjas.length,
-                          (index) => _buildNinjaCard(_playerNinjas[index]),
-                        ),
+                        // Kaijins limités à 2 avec scroll
+                        _buildKaijinsList(),
                       ],
                     ),
                   ),
@@ -419,7 +352,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ElevatedButton(
                   onPressed: _showNewGameDialog,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: KaiColors.background,
+                    backgroundColor: styles.KaiColors.background,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 30, vertical: 15),
                     shape: RoundedRectangleBorder(
@@ -449,19 +382,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   onPressed: _openRankingScreen,
                   icon: Icon(
                     Icons.emoji_events,
-                    color: KaiColors.kaiNeutral,
+                    color: styles.KaiColors.accent,
                   ),
                   label: Text(
                     'Classement mondial',
                     style: TextStyle(
-                      color: KaiColors.kaiNeutral,
+                      color: styles.KaiColors.accent,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
 
                 // Bouton de déconnexion
-                if (_playerNinjas.isNotEmpty)
+                if (_playerKaijins.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 15),
                     child: TextButton(
@@ -487,36 +420,124 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
-  // Carte pour afficher un ninja
-  Widget _buildNinjaCard(Ninja ninja) {
+  // Construire la liste des kaijins
+  Widget _buildKaijinsList() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_playerKaijins.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'Aucun personnage disponible',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _showNewGameDialog,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: styles.KaiColors.background,
+              ),
+              child: const Text('Créer un personnage'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Hauteur fixe pour afficher 2 kaijins maximum
+    final double containerHeight = min(160, _playerKaijins.length * 80);
+
+    return Column(
+      children: [
+        Container(
+          height: containerHeight,
+          // Ajouter un petit effet d'ombre pour indiquer qu'on peut scroller
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 3,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: ListView.builder(
+            shrinkWrap: true,
+            physics: const BouncingScrollPhysics(),
+            itemCount: _playerKaijins.length,
+            itemBuilder: (context, index) {
+              final kaijin = _playerKaijins[index];
+              return _buildKaijinCard(kaijin);
+            },
+          ),
+        ),
+
+        // Indicateur de défilement si plus de 2 kaijins
+        if (_playerKaijins.length > 2)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.swipe_vertical,
+                  color: Colors.white70,
+                  size: 16,
+                ),
+                SizedBox(width: 4),
+                Text(
+                  'Faire défiler pour voir plus',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  // Carte pour afficher un kaijin
+  Widget _buildKaijinCard(Kaijin kaijin) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            KaiColors.background.withOpacity(0.2),
-            KaiColors.background.withOpacity(0.4),
+            styles.KaiColors.background.withOpacity(0.2),
+            styles.KaiColors.background.withOpacity(0.4),
           ],
         ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: KaiColors.background,
+          backgroundColor: styles.KaiColors.background,
           child: const Icon(
             Icons.person,
             color: Colors.white,
           ),
         ),
         title: Text(
-          ninja.name,
+          kaijin.name,
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
           ),
         ),
         subtitle: Text(
-          'Niveau ${ninja.level} • XP: ${ninja.xp} • Puissance: ${ninja.power}',
+          'Niveau ${kaijin.level} • XP: ${kaijin.xp} • Puissance: ${kaijin.power}',
           style: const TextStyle(
             color: Colors.white70,
             fontSize: 12,
@@ -526,13 +547,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           Icons.chevron_right,
           color: Colors.white70,
         ),
-        onTap: () => _loadNinjaAndStartGame(ninja),
+        onTap: () async {
+          await _loadKaijinAndStartGame(kaijin);
+        },
       ),
     );
   }
 
-  // Affichage de la boîte de dialogue de création de ninja
-  void _showCreateNinjaDialog() {
+  // Affichage de la boîte de dialogue de création de kaijin
+  void _showCreateKaijinDialog() {
     showDialog(
       context: context,
       builder: (context) {
@@ -541,7 +564,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             'Créer un nouveau personnage',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: KaiColors.background,
+              color: styles.KaiColors.background,
             ),
           ),
           content: TextField(
@@ -551,7 +574,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               labelText: 'Nom du personnage',
               focusedBorder: OutlineInputBorder(
                 borderSide: BorderSide(
-                  color: KaiColors.background,
+                  color: styles.KaiColors.background,
                   width: 2.0,
                 ),
               ),
@@ -574,12 +597,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 String name = _nameController.text.trim();
                 if (name.isNotEmpty) {
                   Navigator.pop(context);
-                  _createNinjaAndStartGame(name);
+                  _createKaijinAndStartGame(name);
                   _nameController.clear();
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: KaiColors.background,
+                backgroundColor: styles.KaiColors.background,
               ),
               child: const Text(
                 'Créer',

@@ -10,9 +10,15 @@ class KaiColors {
 
   // Couleurs additionnelles
   static const Color background = Color(0xFF121212);
+  static const Color backgroundDark = Color(0xFF0A0A0A);
+  static const Color backgroundLight = Color(0xFF2A2A2A);
   static const Color cardBackground = Color(0xFF1E1E1E);
   static const Color textPrimary = Colors.white;
   static const Color textSecondary = Colors.white70;
+
+  // Couleurs secondaires
+  static const Color secondary = Color(0xFF6C7A9C);
+  static const Color grey = Color(0xFF666666);
 
   // Couleurs spécifiques
   static const Color error = Colors.red;

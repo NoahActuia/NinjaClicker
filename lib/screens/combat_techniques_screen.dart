@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/technique.dart';
-import '../models/ninja_technique.dart';
-import '../models/ninja.dart';
-import '../services/ninja_service.dart';
+import '../models/kaijin_technique.dart';
+import '../models/kaijin.dart';
+import '../services/kaijin_service.dart';
 import '../services/technique_service.dart';
 import '../styles/kai_colors.dart';
 
@@ -19,11 +19,11 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _userId = FirebaseAuth.instance.currentUser?.uid ?? '';
   final TechniqueService _techniqueService = TechniqueService();
-  final NinjaService _ninjaService = NinjaService();
+  final KaijinService _kaijinService = KaijinService();
 
   bool _isLoading = true;
-  String _ninjaId = '';
-  String _ninjaName = '';
+  String _kaijinId = '';
+  String _kaijinName = '';
 
   // Techniques du joueur par catégorie
   List<Technique> _activeTechniques = [];
@@ -49,45 +49,39 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
   }
 
   Future<void> _initialize() async {
-    await _getCurrentNinja();
+    await _getCurrentKaijin();
     await _loadTechniques();
     await _checkForLegacySettings();
     await _loadSelectedTechniques();
   }
 
-  // Récupérer le ninja actuel
-  Future<void> _getCurrentNinja() async {
+  // Récupérer le kaijin actuel
+  Future<void> _getCurrentKaijin() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         throw Exception('Utilisateur non authentifié');
       }
 
-      // Récupérer les ninjas de l'utilisateur avec NinjaService
-      final ninjas = await _ninjaService.getNinjasByUser(user.uid);
+      // Utiliser la nouvelle méthode getCurrentkaijin du service
+      final currentKaijin = await _kaijinService.getCurrentKaijin(user.uid);
 
-      if (ninjas.isEmpty) {
+      if (currentKaijin == null) {
         throw Exception('Aucun personnage trouvé pour l\'utilisateur');
       }
 
-      // Trier les ninjas par date de dernière connexion (du plus récent au moins récent)
-      ninjas.sort((a, b) => b.lastConnected.compareTo(a.lastConnected));
-
-      // Utiliser le ninja le plus récemment connecté
-      final currentNinja = ninjas.first;
-
       print(
-          'Ninja sélectionné: ${currentNinja.name} (dernière connexion: ${currentNinja.lastConnected})');
+          'Kaijin sélectionné: ${currentKaijin.name} (dernière connexion: ${currentKaijin.lastConnected})');
 
       setState(() {
-        _ninjaId = currentNinja.id;
-        _ninjaName = currentNinja.name;
+        _kaijinId = currentKaijin.id;
+        _kaijinName = currentKaijin.name;
       });
     } catch (e) {
-      print('Erreur lors de la récupération du ninja: $e');
+      print('Erreur lors de la récupération du kaijin: $e');
       setState(() {
-        _ninjaId = '';
-        _ninjaName = 'Fracturé inconnu';
+        _kaijinId = '';
+        _kaijinName = 'Fracturé inconnu';
       });
     }
   }
@@ -98,19 +92,19 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
     });
 
     try {
-      if (_ninjaId.isEmpty) {
-        throw Exception('ID du ninja non disponible');
+      if (_kaijinId.isEmpty) {
+        throw Exception('ID du kaijin non disponible');
       }
 
-      // Ne récupérer que les techniques associées au ninja actuel
+      // Ne récupérer que les techniques associées au kaijin actuel
       // directement depuis le service, sans fusionner avec d'autres techniques
-      final ninjaTechniques =
-          await _techniqueService.getTechniquesForNinja(_ninjaId);
+      final kaijinTechniques =
+          await _techniqueService.getTechniquesForKaijin(_kaijinId);
 
       // Si aucune technique n'est trouvée, récupérer les techniques par défaut
-      if (ninjaTechniques.isEmpty) {
+      if (kaijinTechniques.isEmpty) {
         print(
-            'Aucune technique trouvée pour ce ninja, chargement des techniques par défaut');
+            'Aucune technique trouvée pour ce kaijin, chargement des techniques par défaut');
         await _loadDefaultTechniques();
         return;
       }
@@ -121,7 +115,7 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
       _passiveTechniques = [];
       _simpleTechniques = [];
 
-      for (var technique in ninjaTechniques) {
+      for (var technique in kaijinTechniques) {
         switch (technique.type) {
           case 'active':
             _activeTechniques.add(technique);
@@ -186,17 +180,17 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
 
   Future<void> _loadSelectedTechniques() async {
     try {
-      // Vérifier que nous avons un ID de ninja valide
-      if (_ninjaId.isEmpty) {
+      // Vérifier que nous avons un ID de kaijin valide
+      if (_kaijinId.isEmpty) {
         print(
-            'Aucun ninja actif trouvé, impossible de charger la configuration');
+            'Aucun kaijin actif trouvé, impossible de charger la configuration');
         _initializeDefaultSelection();
         return;
       }
 
       final snapshot = await _firestore
-          .collection('ninjas')
-          .doc(_ninjaId)
+          .collection('kaijins')
+          .doc(_kaijinId)
           .collection('combat_settings')
           .doc('techniques')
           .get();
@@ -284,10 +278,10 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
 
   Future<void> _saveSelectedTechniques() async {
     try {
-      // Vérifier que nous avons un ID de ninja valide
-      if (_ninjaId.isEmpty) {
+      // Vérifier que nous avons un ID de kaijin valide
+      if (_kaijinId.isEmpty) {
         throw Exception(
-            'Aucun ninja actif trouvé, impossible de sauvegarder la configuration');
+            'Aucun kaijin actif trouvé, impossible de sauvegarder la configuration');
       }
 
       // Préparer les données à sauvegarder
@@ -299,17 +293,17 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
         'updated_at': FieldValue.serverTimestamp(),
       };
 
-      // Enregistrer dans Firestore - directement dans le document du ninja
+      // Enregistrer dans Firestore - directement dans le document du kaijin
       await _firestore
-          .collection('ninjas')
-          .doc(_ninjaId)
+          .collection('kaijins')
+          .doc(_kaijinId)
           .collection('combat_settings')
           .doc('techniques')
           .set(data);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Configuration de combat de $_ninjaName sauvegardée'),
+          content: Text('Configuration de combat de $_kaijinName sauvegardée'),
           backgroundColor: KaiColors.success,
           duration: Duration(seconds: 2),
           action: SnackBarAction(
@@ -391,11 +385,11 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
     });
   }
 
-  // Vérifier si l'utilisateur a une ancienne configuration et la migrer vers le ninja
+  // Vérifier si l'utilisateur a une ancienne configuration et la migrer vers le kaijin
   Future<void> _checkForLegacySettings() async {
     try {
-      // Ne vérifier que si nous avons un ID de ninja et un ID d'utilisateur
-      if (_ninjaId.isEmpty || _userId.isEmpty) {
+      // Ne vérifier que si nous avons un ID de kaijin et un ID d'utilisateur
+      if (_kaijinId.isEmpty || _userId.isEmpty) {
         return;
       }
 
@@ -407,32 +401,32 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
           .doc('techniques')
           .get();
 
-      // Si une ancienne configuration existe, la migrer vers le ninja
+      // Si une ancienne configuration existe, la migrer vers le kaijin
       if (legacySnapshot.exists) {
         final data = legacySnapshot.data() as Map<String, dynamic>;
 
-        // Vérifier si le ninja a déjà une configuration
-        final ninjaConfigSnapshot = await _firestore
-            .collection('ninjas')
-            .doc(_ninjaId)
+        // Vérifier si le kaijin a déjà une configuration
+        final kaijinConfigSnapshot = await _firestore
+            .collection('kaijins')
+            .doc(_kaijinId)
             .collection('combat_settings')
             .doc('techniques')
             .get();
 
-        // Ne migrer que si le ninja n'a pas encore de configuration
-        if (!ninjaConfigSnapshot.exists) {
+        // Ne migrer que si le kaijin n'a pas encore de configuration
+        if (!kaijinConfigSnapshot.exists) {
           print(
-              'Migration des paramètres de combat depuis l\'utilisateur vers le ninja');
+              'Migration des paramètres de combat depuis l\'utilisateur vers le kaijin');
 
           // Ajouter un marqueur de migration
           final migratedData = Map<String, dynamic>.from(data);
           migratedData['migrated_from_user'] = true;
           migratedData['migration_date'] = FieldValue.serverTimestamp();
 
-          // Enregistrer dans le document du ninja
+          // Enregistrer dans le document du kaijin
           await _firestore
-              .collection('ninjas')
-              .doc(_ninjaId)
+              .collection('kaijins')
+              .doc(_kaijinId)
               .collection('combat_settings')
               .doc('techniques')
               .set(migratedData);
@@ -465,7 +459,7 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
               style: TextStyle(color: KaiColors.textPrimary),
             ),
             Text(
-              'Fracturé: $_ninjaName',
+              'Fracturé: $_kaijinName',
               style: TextStyle(
                 color: KaiColors.accent,
                 fontSize: 14,
@@ -1153,13 +1147,13 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
                         // Coût en Kai
                         _buildStatBadge(
                           Icons.water_drop,
-                          '${technique.chakraCost}',
+                          '${technique.cost_kai}',
                           Colors.blueAccent,
                         ),
                         // Temps de recharge
                         _buildStatBadge(
                           Icons.timer,
-                          '${technique.cooldown}s',
+                          '${technique.cooldown} tours',
                           Colors.amberAccent,
                         ),
                         // Effet
@@ -1173,14 +1167,14 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
                             technique.trigger != null)
                           _buildStatBadge(
                             Icons.bolt,
-                            'Si: ${technique.trigger}',
+                            'Déclenche: ${technique.trigger}',
                             Colors.purpleAccent,
                           ),
                         // Condition générée
-                        if (technique.conditionGenerated != null)
+                        if (technique.condition_generated != null)
                           _buildStatBadge(
                             Icons.add_circle_outline,
-                            'Génère: ${technique.conditionGenerated}',
+                            'Génère: ${technique.condition_generated}',
                             Colors.greenAccent,
                           ),
                       ],
@@ -1291,7 +1285,7 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
 
     // Calculer la puissance actuelle en fonction du niveau
     double powerMultiplier = 1.0 + (0.25 * (technique.level - 1));
-    int currentPower = (technique.powerPerSecond * powerMultiplier).round();
+    int currentPower = (technique.damage * powerMultiplier).round();
 
     showModalBottomSheet(
       context: context,
@@ -1442,17 +1436,16 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
                             technique.affinity ?? 'Neutre', Icons.auto_awesome),
                         _buildStatItem(
                             'Effet', technique.effect, Icons.flash_on),
-                        _buildStatItem('Coût Kai', '${technique.chakraCost}',
+                        _buildStatItem('Coût Kai', '${technique.cost_kai}',
                             Icons.water_drop),
+                        _buildStatItem('Recharge',
+                            '${technique.cooldown} tours', Icons.timer),
                         _buildStatItem(
-                            'Recharge', '${technique.cooldown}s', Icons.timer),
-                        _buildStatItem(
-                            'Puissance', '$currentPower / sec', Icons.bolt),
+                            'Puissance', '$currentPower', Icons.bolt),
                       ],
                     ),
-                    // Déclencheurs et conditions
-                    if (technique.type == 'auto' &&
-                        technique.trigger != null) ...[
+                    // Déclencheurs (trigger)
+                    if (technique.trigger != null) ...[
                       SizedBox(height: 24),
                       Text(
                         'Déclencheur',
@@ -1495,11 +1488,55 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
                         ),
                       ),
                     ],
-                    // Condition générée
-                    if (technique.conditionGenerated != null) ...[
+                    // Condition de déclenchement
+                    if (technique.trigger_condition != null) ...[
                       SizedBox(height: 24),
                       Text(
-                        'Génère la condition',
+                        'Condition de déclenchement',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: KaiColors.textPrimary,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: KaiColors.cardBackground,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.orangeAccent.withOpacity(0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.priority_high,
+                              color: Colors.orangeAccent,
+                              size: 20,
+                            ),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                technique.trigger_condition!,
+                                style: TextStyle(
+                                  color: KaiColors.textPrimary,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    // Condition générée
+                    if (technique.condition_generated != null) ...[
+                      SizedBox(height: 24),
+                      Text(
+                        'Condition générée',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -1528,7 +1565,7 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
                             SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                technique.conditionGenerated!,
+                                technique.condition_generated!,
                                 style: TextStyle(
                                   color: KaiColors.textPrimary,
                                   fontSize: 16,

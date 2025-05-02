@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 
-class StoryIntro extends StatefulWidget {
+class MissionIntroBSequence extends StatefulWidget {
   final VoidCallback onComplete;
 
-  const StoryIntro({
+  const MissionIntroBSequence({
     super.key,
     required this.onComplete,
   });
 
   @override
-  State<StoryIntro> createState() => _StoryIntroState();
+  State<MissionIntroBSequence> createState() => _MissionIntroBSequenceState();
 }
 
-class _StoryIntroState extends State<StoryIntro> with SingleTickerProviderStateMixin {
+class _MissionIntroBSequenceState extends State<MissionIntroBSequence>
+    with SingleTickerProviderStateMixin {
   int _currentPage = 0;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
@@ -21,24 +22,20 @@ class _StoryIntroState extends State<StoryIntro> with SingleTickerProviderStateM
 
   final List<Map<String, String>> _pages = [
     {
-      'image': 'assets/images_histoire/introo/introo1.png',
-      'text': 'Le dojo est silencieux.\nLe Sensei m\'observe, impassible.\nC\'est l\'heure de prouver ma valeur.',
+      'image': 'assets/images_histoire/combat2/combat2.png',
+      'text': 'Il ne parle pas.',
     },
     {
-      'image': 'assets/images_histoire/introo/introo2.png',
-      'text': 'Mon bras tremble encore du dernier exercice.\nJe me suis juré de ne jamais abandonner.\nAujourd\'hui, je vais tenir.',
+      'image': 'assets/images_histoire/combat2/combat22.png',
+      'text': 'Sa posture est parfaite.',
     },
     {
-      'image': 'assets/images_histoire/introo/introo3.png',
-      'text': 'Il est là, toujours devant moi.\nPlus rapide, plus fort… pour l\'instant.\nJe veux dépasser ce rival.',
+      'image': 'assets/images_histoire/combat2/combat222.png',
+      'text': 'Chaque erreur sera punie.',
     },
     {
-      'image': 'assets/images_histoire/introo/introo4.png',
-      'text': 'Une rumeur court : seuls les plus dignes\nont survécu à cette épreuve.\nMon tour est venu.',
-    },
-    {
-      'image': 'assets/images_histoire/introo/introo5.png',
-      'text': 'Ce regard... il n\'est plus mon maître.\nIl est mon obstacle final.\nSi je flanche, je recule.',
+      'image': 'assets/images_histoire/combat2/combat2222.png',
+      'text': 'Mais j\'ai étudié ses mouvements.',
     },
   ];
 
@@ -46,12 +43,15 @@ class _StoryIntroState extends State<StoryIntro> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 800),
       vsync: this,
     );
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(_fadeController);
     _fadeController.forward();
     _startAutoScroll();
+    
+    // Précacher les images pour éviter les problèmes de chargement
+    _precacheImages();
   }
 
   @override
@@ -92,6 +92,19 @@ class _StoryIntroState extends State<StoryIntro> with SingleTickerProviderStateM
     });
   }
 
+  void _precacheImages() async {
+    for (var page in _pages) {
+      // Essayer de précacher chaque image et journaliser les résultats
+      try {
+        print("Préchargement de l'image: ${page['image']}");
+        await precacheImage(AssetImage(page['image']!), context);
+        print("Préchargement réussi: ${page['image']}");
+      } catch (e) {
+        print("ERREUR de préchargement pour ${page['image']}: $e");
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -106,14 +119,22 @@ class _StoryIntroState extends State<StoryIntro> with SingleTickerProviderStateM
               image: AssetImage(_pages[_currentPage]['image']!),
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) {
-                // Fond de secours si l'image ne charge pas
+                // Afficher un fond de remplacement en cas d'erreur
                 return Container(
                   color: Colors.black,
                   child: Center(
-                    child: Icon(
-                      Icons.image_not_supported_outlined,
-                      color: Colors.white.withOpacity(0.3),
-                      size: 64,
+                    child: Container(
+                      width: 200,
+                      height: 200,
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          colors: [
+                            Colors.purple.withOpacity(0.7),
+                            Colors.transparent,
+                          ],
+                          radius: 0.8,
+                        ),
+                      ),
                     ),
                   ),
                 );
@@ -131,7 +152,7 @@ class _StoryIntroState extends State<StoryIntro> with SingleTickerProviderStateM
                   Colors.transparent,
                   Colors.black.withOpacity(0.8),
                 ],
-                stops: const [0.5, 1.0],
+                stops: const [0.6, 1.0],
               ),
             ),
           ),
@@ -149,9 +170,16 @@ class _StoryIntroState extends State<StoryIntro> with SingleTickerProviderStateM
                     _pages[_currentPage]['text']!,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w500,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w600,
                       height: 1.5,
+                      shadows: [
+                        Shadow(
+                          offset: Offset(0, 2),
+                          blurRadius: 4,
+                          color: Colors.black,
+                        ),
+                      ],
                     ),
                     textAlign: TextAlign.center,
                   ),

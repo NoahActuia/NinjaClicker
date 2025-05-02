@@ -51,7 +51,7 @@ class _VictorySequenceState extends State<VictorySequence>
   }
 
   void _startAutoScroll() {
-    _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+    _autoScrollTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
       if (_currentPage < _pages.length - 1) {
         _nextPage();
       } else {
@@ -62,8 +62,14 @@ class _VictorySequenceState extends State<VictorySequence>
   }
 
   void _skipIntro() {
-    _autoScrollTimer?.cancel();
-    widget.onComplete();
+    if (_currentPage < _pages.length - 1) {
+      _autoScrollTimer?.cancel();
+      _nextPage();
+      _startAutoScroll();
+    } else {
+      _autoScrollTimer?.cancel();
+      widget.onComplete();
+    }
   }
 
   void _nextPage() {

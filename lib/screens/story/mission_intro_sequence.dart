@@ -22,19 +22,19 @@ class _MissionIntroSequenceState extends State<MissionIntroSequence>
 
   final List<Map<String, String>> _pages = [
     {
-      'image': 'assets/images_histoire/combat1.png',
+      'image': 'assets/images_histoire/combat1/combat1.png',
       'text': 'Tous les élèves sont rassemblés.',
     },
     {
-      'image': 'assets/images_histoire/combat11.png',
+      'image': 'assets/images_histoire/combat1/combat11.png',
       'text': 'Le Sensei observe… silencieux.',
     },
     {
-      'image': 'assets/images_histoire/combat111.png',
+      'image': 'assets/images_histoire/combat1/combat111.png',
       'text': 'Pour mériter un avenir, il faut d\'abord battre ses pairs.',
     },
     {
-      'image': 'assets/images_histoire/combat1111.png',
+      'image': 'assets/images_histoire/combat1/combat1111.png',
       'text': 'Je me tiens face à mon premier adversaire.',
     },
   ];
@@ -49,6 +49,9 @@ class _MissionIntroSequenceState extends State<MissionIntroSequence>
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(_fadeController);
     _fadeController.forward();
     _startAutoScroll();
+    
+    // Précacher les images pour éviter les problèmes de chargement
+    _precacheImages();
   }
 
   @override
@@ -59,7 +62,7 @@ class _MissionIntroSequenceState extends State<MissionIntroSequence>
   }
 
   void _startAutoScroll() {
-    _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+    _autoScrollTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
       if (_currentPage < _pages.length - 1) {
         _nextPage();
       } else {
@@ -70,8 +73,14 @@ class _MissionIntroSequenceState extends State<MissionIntroSequence>
   }
 
   void _skipIntro() {
-    _autoScrollTimer?.cancel();
-    widget.onComplete();
+    if (_currentPage < _pages.length - 1) {
+      _autoScrollTimer?.cancel();
+      _nextPage();
+      _startAutoScroll();
+    } else {
+      _autoScrollTimer?.cancel();
+      widget.onComplete();
+    }
   }
 
   void _nextPage() {
@@ -81,6 +90,19 @@ class _MissionIntroSequenceState extends State<MissionIntroSequence>
       });
       _fadeController.forward();
     });
+  }
+
+  void _precacheImages() async {
+    for (var page in _pages) {
+      // Essayer de précacher chaque image et journaliser les résultats
+      try {
+        print("Préchargement de l'image: ${page['image']}");
+        await precacheImage(AssetImage(page['image']!), context);
+        print("Préchargement réussi: ${page['image']}");
+      } catch (e) {
+        print("ERREUR de préchargement pour ${page['image']}: $e");
+      }
+    }
   }
 
   @override
@@ -93,9 +115,30 @@ class _MissionIntroSequenceState extends State<MissionIntroSequence>
           // Image de fond
           FadeTransition(
             opacity: _fadeAnimation,
-            child: Image.asset(
-              _pages[_currentPage]['image']!,
+            child: Image(
+              image: AssetImage(_pages[_currentPage]['image']!),
               fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                // Afficher un fond de remplacement en cas d'erreur
+                return Container(
+                  color: Colors.black,
+                  child: Center(
+                    child: Container(
+                      width: 200,
+                      height: 200,
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          colors: [
+                            Colors.purple.withOpacity(0.7),
+                            Colors.transparent,
+                          ],
+                          radius: 0.8,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
           

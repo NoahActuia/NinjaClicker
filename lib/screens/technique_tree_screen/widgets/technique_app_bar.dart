@@ -53,6 +53,28 @@ class TechniqueAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
+        // Bouton pour le mode en ligne
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 8.0),
+          margin: EdgeInsets.only(right: 8.0),
+          decoration: BoxDecoration(
+            color: KaiColors.accent.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: TextButton.icon(
+            icon: Icon(Icons.public, color: KaiColors.accent),
+            label: Text(
+              'Mode en ligne',
+              style: TextStyle(
+                color: KaiColors.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            onPressed: () {
+              Navigator.pushNamed(context, '/online_combat');
+            },
+          ),
+        ),
         // Filtre par affinité
         Container(
           padding: EdgeInsets.symmetric(horizontal: 8.0),

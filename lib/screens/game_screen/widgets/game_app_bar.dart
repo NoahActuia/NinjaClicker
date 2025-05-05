@@ -8,6 +8,7 @@ import 'app_bar_components/power_indicator_widget.dart';
 import 'app_bar_components/app_menu_widget.dart';
 import 'app_bar_components/quit_button_widget.dart';
 import 'app_bar_components/kai_tabs_widget.dart';
+import '../../online_combat_screen.dart';
 
 class GameAppBar extends StatelessWidget implements PreferredSizeWidget {
   final GameState gameState;
@@ -43,6 +44,38 @@ class GameAppBar extends StatelessWidget implements PreferredSizeWidget {
         PowerIndicatorWidget(
             power: gameState.power, formatNumber: gameState.formatNumber),
 
+        // Bouton Mode en ligne
+        IconButton(
+          icon: Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(
+                Icons.public,
+                color: Colors.white,
+                size: 28,
+              ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: KaiColors.accent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.flash_on,
+                    color: Colors.white,
+                    size: 10,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          tooltip: 'Mode en ligne',
+          onPressed: () => _openOnlineCombatScreen(context),
+        ),
+
         // Menu des fonctionnalités
         AppMenuWidget(gameState: gameState),
 
@@ -51,6 +84,19 @@ class GameAppBar extends StatelessWidget implements PreferredSizeWidget {
       ],
       bottom: const KaiTabsWidget(),
     );
+  }
+
+  // Méthode pour ouvrir l'écran de combat en ligne
+  void _openOnlineCombatScreen(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const OnlineCombatScreen(),
+      ),
+    ).then((_) {
+      // Rafraîchir les données après le retour de l'écran de combat en ligne
+      gameState.saveGame(updateConnections: true);
+    });
   }
 
   // Méthode pour retourner au menu principal

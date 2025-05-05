@@ -6,6 +6,7 @@ import 'screens/firebase_test_screen.dart';
 import 'screens/auth_screen.dart';
 import 'screens/auth_wrapper.dart';
 import 'screens/technique_tree_screen.dart';
+import 'screens/online_combat_screen.dart';
 import 'services/database_initializer.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
@@ -90,6 +91,7 @@ class MyApp extends StatelessWidget {
         '/welcome': (context) => const WelcomeScreen(),
         '/firebase_test': (context) => const FirebaseTestScreen(),
         '/technique_tree': (context) => const TechniqueTreeScreen(),
+        '/online_combat': (context) => const OnlineCombatScreen(),
       },
     );
   }

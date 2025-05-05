@@ -5,6 +5,7 @@ import '../../../story/story_screen.dart';
 import '../../../ranking_screen.dart';
 import '../../../technique_tree_screen.dart';
 import '../../../combat_techniques_screen.dart';
+import '../../../online_combat_screen.dart';
 
 /// Widget pour le bouton du menu
 class AppMenuWidget extends StatelessWidget {
@@ -47,6 +48,17 @@ class AppMenuWidget extends StatelessWidget {
               ),
             ).then((_) {
               // Rafraîchir aussi après le retour de l'écran des techniques de combat
+              gameState.saveGame(updateConnections: true);
+            });
+            break;
+          case 'online_combat':
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const OnlineCombatScreen(),
+              ),
+            ).then((_) {
+              // Rafraîchir aussi après le retour de l'écran des combats en ligne
               gameState.saveGame(updateConnections: true);
             });
             break;
@@ -99,6 +111,16 @@ class AppMenuWidget extends StatelessWidget {
             Icon(Icons.sports_kabaddi),
             SizedBox(width: 8),
             Text('Techniques de Combat'),
+          ],
+        ),
+      ),
+      const PopupMenuItem(
+        value: 'online_combat',
+        child: Row(
+          children: [
+            Icon(Icons.public),
+            SizedBox(width: 8),
+            Text('Mode en ligne'),
           ],
         ),
       ),

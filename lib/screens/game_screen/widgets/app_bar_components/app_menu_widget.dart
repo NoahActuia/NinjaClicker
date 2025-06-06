@@ -6,6 +6,7 @@ import '../../../ranking_screen.dart';
 import '../../../technique_tree_screen.dart';
 import '../../../combat_techniques_screen.dart';
 import '../../../online_combat_screen.dart';
+import '../../../training/training_screen.dart';
 
 /// Widget pour le bouton du menu
 class AppMenuWidget extends StatelessWidget {
@@ -28,6 +29,9 @@ class AppMenuWidget extends StatelessWidget {
             break;
           case 'story':
             _goToStoryMode(context);
+            break;
+          case 'training':
+            _openTrainingScreen(context);
             break;
           case 'technique_tree':
             Navigator.push(
@@ -91,6 +95,16 @@ class AppMenuWidget extends StatelessWidget {
             Icon(Icons.book),
             SizedBox(width: 8),
             Text('Mode Histoire'),
+          ],
+        ),
+      ),
+      const PopupMenuItem(
+        value: 'training',
+        child: Row(
+          children: [
+            Icon(Icons.fitness_center),
+            SizedBox(width: 8),
+            Text('Salle d\'Entraînement'),
           ],
         ),
       ),
@@ -185,6 +199,20 @@ class AppMenuWidget extends StatelessWidget {
             // Sauvegarde complète après la mission
             gameState.saveGame(updateConnections: true);
           },
+        ),
+      ),
+    );
+  }
+
+  // Méthode pour ouvrir l'écran d'entraînement
+  void _openTrainingScreen(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TrainingScreen(
+          playerPuissance: gameState.power,
+          playerTechniques: gameState.techniques,
+          kaijinId: gameState.currentKaijin?.id,
         ),
       ),
     );

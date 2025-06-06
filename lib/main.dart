@@ -37,10 +37,7 @@ void main() async {
   final resonanceService = ResonanceService();
   await resonanceService.initDefaultResonances();
 
-  runApp(const MyApp(
-    firebaseInitialized: true,
-    firebaseError: '',
-  ));
+  runApp(const MyApp(firebaseInitialized: true, firebaseError: ''));
 }
 
 class MyApp extends StatelessWidget {
@@ -84,9 +81,11 @@ class MyApp extends StatelessWidget {
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => firebaseInitialized
-            ? const AuthWrapper()
-            : FirebaseErrorScreen(error: firebaseError),
+        '/':
+            (context) =>
+                firebaseInitialized
+                    ? const AuthWrapper()
+                    : FirebaseErrorScreen(error: firebaseError),
         '/auth': (context) => const AuthScreen(),
         '/welcome': (context) => const WelcomeScreen(),
         '/firebase_test': (context) => const FirebaseTestScreen(),
@@ -100,10 +99,7 @@ class MyApp extends StatelessWidget {
 class FirebaseErrorScreen extends StatelessWidget {
   final String error;
 
-  const FirebaseErrorScreen({
-    Key? key,
-    required this.error,
-  }) : super(key: key);
+  const FirebaseErrorScreen({Key? key, required this.error}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -115,11 +111,7 @@ class FirebaseErrorScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 60,
-              ),
+              const Icon(Icons.error_outline, color: Colors.red, size: 60),
               const SizedBox(height: 20),
               const Text(
                 'Erreur d\'initialisation Firebase',

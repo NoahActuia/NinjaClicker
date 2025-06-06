@@ -30,4 +30,10 @@ class KaiColors {
   static const Color sealColor = Colors.amber;
   static const Color driftColor = Colors.teal;
   static const Color strikeColor = Colors.redAccent;
+
+  // Couleurs du Kai
+  static const Color kaiEnergy =
+      Color(0xFF0CFFD3); // Couleur cyan-turquoise pour l'énergie du Kai
+  static const Color kaiDark =
+      Color(0xFF9E4DFF); // Couleur violette pour le Kai adverse
 }

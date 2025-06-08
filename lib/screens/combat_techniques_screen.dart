@@ -97,24 +97,22 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
       }
 
       // Ne récupérer que les techniques associées au kaijin actuel
-      // directement depuis le service, sans fusionner avec d'autres techniques
       final kaijinTechniques =
           await _techniqueService.getTechniquesForKaijin(_kaijinId);
 
-      // Si aucune technique n'est trouvée, récupérer les techniques par défaut
-      if (kaijinTechniques.isEmpty) {
-        print(
-            'Aucune technique trouvée pour ce kaijin, chargement des techniques par défaut');
-        await _loadDefaultTechniques();
-        return;
-      }
-
-      // Trier les techniques par type
+      // Réinitialiser toutes les listes
       _activeTechniques = [];
       _autoTechniques = [];
       _passiveTechniques = [];
       _simpleTechniques = [];
 
+      // Réinitialiser les sélections
+      _selectedActives = [];
+      _selectedAutos = [];
+      _selectedPassives = [];
+      _selectedSimple = null;
+
+      // Trier les techniques débloquées par type
       for (var technique in kaijinTechniques) {
         switch (technique.type) {
           case 'active':
@@ -137,41 +135,16 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
       });
     } catch (e) {
       print('Erreur lors du chargement des techniques: $e');
-
-      // En cas d'erreur, charger les techniques par défaut
-      _loadDefaultTechniques();
-    }
-  }
-
-  // Méthode de secours pour charger les techniques par défaut
-  Future<void> _loadDefaultTechniques() async {
-    try {
-      final defaultTechniques = await _techniqueService.getDefaultTechniques();
-
+      // En cas d'erreur, initialiser avec des listes vides
       _activeTechniques = [];
       _autoTechniques = [];
       _passiveTechniques = [];
       _simpleTechniques = [];
+      _selectedActives = [];
+      _selectedAutos = [];
+      _selectedPassives = [];
+      _selectedSimple = null;
 
-      for (var technique in defaultTechniques) {
-        switch (technique.type) {
-          case 'active':
-            _activeTechniques.add(technique);
-            break;
-          case 'auto':
-            _autoTechniques.add(technique);
-            break;
-          case 'passive':
-            _passiveTechniques.add(technique);
-            break;
-          case 'simple':
-            _simpleTechniques.add(technique);
-            break;
-        }
-      }
-    } catch (e) {
-      print('Erreur lors du chargement des techniques par défaut: $e');
-    } finally {
       setState(() {
         _isLoading = false;
       });
@@ -210,39 +183,25 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
         // Technique simple sélectionnée
         final String? simpleId = data['simple_technique'];
 
-        // Récupérer toutes les techniques disponibles
-        final allTechniques = await _techniqueService.getAllTechniques();
-
-        // Mise à jour des listes de techniques sélectionnées
+        // Ne sélectionner que parmi les techniques déjà chargées (débloquées)
         _selectedActives =
-            allTechniques.where((t) => activeIds.contains(t.id)).toList();
+            _activeTechniques.where((t) => activeIds.contains(t.id)).toList();
         _selectedAutos =
-            allTechniques.where((t) => autoIds.contains(t.id)).toList();
+            _autoTechniques.where((t) => autoIds.contains(t.id)).toList();
         _selectedPassives =
-            allTechniques.where((t) => passiveIds.contains(t.id)).toList();
+            _passiveTechniques.where((t) => passiveIds.contains(t.id)).toList();
 
-        // Correction du problème de typage pour _selectedSimple
+        // Trouver la technique simple sélectionnée parmi les techniques débloquées
         if (simpleId != null) {
           final matchingTechniques =
-              allTechniques.where((t) => t.id == simpleId);
-          if (matchingTechniques.isNotEmpty) {
-            _selectedSimple = matchingTechniques.first;
-          } else if (_simpleTechniques.isNotEmpty) {
-            final defaultTechs = _simpleTechniques.where((t) => t.isDefault);
-            _selectedSimple = defaultTechs.isNotEmpty
-                ? defaultTechs.first
-                : _simpleTechniques.first;
-          } else if (allTechniques.isNotEmpty) {
-            _selectedSimple = allTechniques.first;
-          }
-        } else if (_simpleTechniques.isNotEmpty) {
-          final defaultTechs = _simpleTechniques.where((t) => t.isDefault);
-          _selectedSimple = defaultTechs.isNotEmpty
-              ? defaultTechs.first
-              : _simpleTechniques.first;
+              _simpleTechniques.where((t) => t.id == simpleId);
+          _selectedSimple =
+              matchingTechniques.isNotEmpty ? matchingTechniques.first : null;
+        } else {
+          _selectedSimple = null;
         }
       } else {
-        // Aucune configuration existante, utiliser des valeurs par défaut
+        // Aucune configuration existante, initialiser avec des listes vides
         _initializeDefaultSelection();
       }
 
@@ -255,25 +214,11 @@ class _CombatTechniquesScreenState extends State<CombatTechniquesScreen> {
   }
 
   void _initializeDefaultSelection() {
-    // Sélectionner les techniques par défaut
-    _selectedActives =
-        _activeTechniques.where((t) => t.isDefault).take(_maxActives).toList();
-    _selectedAutos =
-        _autoTechniques.where((t) => t.isDefault).take(_maxAutos).toList();
-    _selectedPassives = _passiveTechniques
-        .where((t) => t.isDefault)
-        .take(_maxPassives)
-        .toList();
-
-    // La fonction firstWhere avec orElse doit retourner un objet Technique et non null
-    if (_simpleTechniques.isNotEmpty) {
-      final defaultTechs = _simpleTechniques.where((t) => t.isDefault).toList();
-      _selectedSimple = defaultTechs.isNotEmpty
-          ? defaultTechs.first
-          : _simpleTechniques.first;
-    } else {
-      _selectedSimple = null;
-    }
+    // Ne sélectionner aucune technique par défaut si le kaijin n'en a pas débloqué
+    _selectedActives = [];
+    _selectedAutos = [];
+    _selectedPassives = [];
+    _selectedSimple = null;
   }
 
   Future<void> _saveSelectedTechniques() async {

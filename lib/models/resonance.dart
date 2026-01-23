@@ -149,13 +149,16 @@ class Resonance {
   // Depuis Firestore
   factory Resonance.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    final dynamic upgradeCostValue =
+        data['xpCostToUpgradeLink'] ?? data['baseUpgradeCost'] ?? 0;
     return Resonance(
       id: doc.id,
       name: data['name'] ?? '',
       description: data['description'] ?? '',
       xpPerSecond: data['xpPerSecond'] ?? 0,
       xpCostToUnlock: data['xpCostToUnlock'] ?? 0,
-      xpCostToUpgradeLink: data['xpCostToUpgradeLink'] ?? 0,
+      xpCostToUpgradeLink:
+          upgradeCostValue is num ? upgradeCostValue.toInt() : 0,
       maxLinkLevel: data['maxLinkLevel'] ?? 1,
       linkLevel: data['linkLevel'] ?? 0,
       isUnlocked: data['isUnlocked'] ?? false,
@@ -183,13 +186,16 @@ class Resonance {
 
   // Depuis JSON
   factory Resonance.fromJson(Map<String, dynamic> json) {
+    final dynamic upgradeCostValue =
+        json['xpCostToUpgradeLink'] ?? json['baseUpgradeCost'] ?? 0;
     return Resonance(
       id: json['id'] ?? '',
       name: json['name'] ?? '',
       description: json['description'] ?? '',
       xpPerSecond: json['xpPerSecond'] ?? 0,
       xpCostToUnlock: json['xpCostToUnlock'] ?? 0,
-      xpCostToUpgradeLink: json['xpCostToUpgradeLink'] ?? 0,
+      xpCostToUpgradeLink:
+          upgradeCostValue is num ? upgradeCostValue.toInt() : 0,
       maxLinkLevel: json['maxLinkLevel'] ?? 1,
       linkLevel: json['linkLevel'] ?? 0,
       isUnlocked: json['isUnlocked'] ?? false,

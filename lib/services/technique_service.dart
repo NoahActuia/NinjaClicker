@@ -936,7 +936,7 @@ class TechniqueService {
   // Débloquer une technique
   Future<bool> unlockTechnique(Kaijin kaijin, Technique technique, int totalXP,
       Function(int) updateXP) async {
-    final cost = technique.cout;
+    final cost = technique.xp_unlock_cost;
     if (totalXP < cost) return false;
 
     updateXP(-cost);
@@ -978,8 +978,7 @@ class TechniqueService {
 
   // Calculer le coût d'amélioration d'une technique
   int calculateUpgradeCost(Technique technique) {
-    // Formule de calcul du coût d'amélioration
-    return (technique.cout * (1.5 * (technique.niveau + 1))).toInt();
+    return technique.getUpgradeCost();
   }
 
   // Calculer la puissance totale des techniques

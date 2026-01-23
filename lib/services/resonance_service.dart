@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/resonance.dart';
 import '../models/kaijin.dart';
-import '../models/kaijin_resonance.dart';
 import 'audio_service.dart';
 
 class ResonanceService {
@@ -279,6 +278,9 @@ class ResonanceService {
   // Initialiser les résonances par défaut
   Future<void> initDefaultResonances() async {
     try {
+      // Migration legacy: harmoniser les anciens champs avant tout chargement.
+      await migrateLegacyUpgradeCostField();
+
       // Vérifier si les résonances existent déjà
       final existingResonances = await getAllResonances();
       if (existingResonances.isNotEmpty) {
@@ -294,7 +296,7 @@ class ResonanceService {
               'Établit une connexion avec le Flux du Kai, générant un faible flux d\'XP passive.',
           'xpPerSecond': 0.5,
           'xpCostToUnlock': 100,
-          'baseUpgradeCost': 50,
+          'xpCostToUpgradeLink': 50,
           'maxLinkLevel': 10,
           'affinity': 'Flux',
         },
@@ -304,7 +306,7 @@ class ResonanceService {
               'Crée un lien avec les fissures du Kai, augmentant légèrement la génération d\'XP par clic.',
           'xpPerSecond': 0.3,
           'xpCostToUnlock': 250,
-          'baseUpgradeCost': 100,
+          'xpCostToUpgradeLink': 100,
           'maxLinkLevel': 8,
           'affinity': 'Fracture',
         },
@@ -314,7 +316,7 @@ class ResonanceService {
               'Forme un lien mental avec les Sceaux anciens, permettant une meilleure compréhension du Kai.',
           'xpPerSecond': 0.7,
           'xpCostToUnlock': 500,
-          'baseUpgradeCost': 150,
+          'xpCostToUpgradeLink': 150,
           'maxLinkLevel': 6,
           'affinity': 'Sceau',
         },
@@ -324,7 +326,7 @@ class ResonanceService {
               'S\'accorde à la Dérive du Kai pour générer une quantité modérée d\'XP au fil du temps.',
           'xpPerSecond': 1.2,
           'xpCostToUnlock': 1000,
-          'baseUpgradeCost': 300,
+          'xpCostToUpgradeLink': 300,
           'maxLinkLevel': 5,
           'affinity': 'Dérive',
         },
@@ -334,7 +336,7 @@ class ResonanceService {
               'Renforce la connexion avec l\'aspect Frappe du Kai, augmentant l\'efficacité des clics.',
           'xpPerSecond': 0.2,
           'xpCostToUnlock': 750,
-          'baseUpgradeCost': 250,
+          'xpCostToUpgradeLink': 250,
           'maxLinkLevel': 7,
           'affinity': 'Frappe',
         },
@@ -349,6 +351,38 @@ class ResonanceService {
           '${defaultResonances.length} résonances par défaut ont été initialisées');
     } catch (e) {
       print('Erreur lors de l\'initialisation des résonances par défaut: $e');
+    }
+  }
+
+  // Migration idempotente du schéma legacy vers le champ canonique.
+  Future<void> migrateLegacyUpgradeCostField() async {
+    try {
+      final snapshot = await _firestore.collection('resonances').get();
+      if (snapshot.docs.isEmpty) return;
+
+      final batch = _firestore.batch();
+      int updatedCount = 0;
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final hasCanonicalField = data.containsKey('xpCostToUpgradeLink');
+        final legacyValue = data['baseUpgradeCost'];
+
+        if (!hasCanonicalField && legacyValue is num) {
+          batch.update(doc.reference, {
+            'xpCostToUpgradeLink': legacyValue.toInt(),
+          });
+          updatedCount++;
+        }
+      }
+
+      if (updatedCount > 0) {
+        await batch.commit();
+        print(
+            'Migration résonances: $updatedCount document(s) mis à jour vers xpCostToUpgradeLink');
+      }
+    } catch (e) {
+      print('Erreur migration résonances legacy: $e');
     }
   }
 }

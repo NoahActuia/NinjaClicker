@@ -1,6 +1,5 @@
 import 'dart:async';
-import 'dart:math' show max, min;
-import 'package:flutter/material.dart';
+import 'dart:math' show max;
 import '../../models/kaijin.dart';
 import '../../models/technique.dart';
 import '../../models/sensei.dart';
@@ -38,16 +37,18 @@ class GameState {
 
   // Collections
   List<Technique> techniques = [];
-  List<Sensei> senseis = [];
   List<Technique> playerTechniques = [];
-  List<Sensei> playerSenseis = [];
   Map<String, int> techniqueLevels = {};
-  Map<String, int> senseiLevels = {};
-  Map<String, int> senseiQuantities = {};
 
   // Système de Résonance
   List<Resonance> allResonances = [];
   List<Resonance> playerResonances = [];
+
+  // Système de Senseis (nouveau)
+  List<Sensei> allSenseis = [];
+  List<Sensei> playerSenseis = [];
+
+  // XP hors-ligne
   int offlineXpGained = 0;
   bool offlineXpClaimed = false;
 
@@ -84,15 +85,21 @@ class GameState {
     }
   }
 
+  Future<void> initDefaultSenseis() async {
+    try {
+      await senseiService.initDefaultSenseis();
+      await loadPlayerSenseis();
+    } catch (e) {
+      print('Erreur lors de l\'initialisation des senseis: $e');
+    }
+  }
+
   // Méthodes pour les résonances
   Future<void> unlockResonance(Resonance resonance) async {
     if (currentKaijin == null) return;
 
     final success = await resonanceService.unlockResonanceWithXp(
-        currentKaijin!, resonance, totalXP, (int amount) {
-      totalXP += amount;
-      updateState();
-    });
+        currentKaijin!, resonance, totalXP, adjustSpendableXp);
 
     if (success) {
       // Mettre à jour localement la résonance sans attendre le rechargement
@@ -109,10 +116,7 @@ class GameState {
     if (currentKaijin == null) return;
 
     final success = await resonanceService.upgradeResonanceWithXp(
-        currentKaijin!, resonance, totalXP, (int amount) {
-      totalXP += amount;
-      updateState();
-    });
+        currentKaijin!, resonance, totalXP, adjustSpendableXp);
 
     if (success) {
       // Mettre à jour localement la résonance sans attendre le rechargement
@@ -120,6 +124,40 @@ class GameState {
 
       // Rafraîchir les listes de résonances
       await loadPlayerResonances();
+      updateState();
+    }
+  }
+
+  // Méthodes pour les senseis
+  Future<void> unlockSensei(Sensei sensei) async {
+    if (currentKaijin == null) return;
+
+    final success = await senseiService
+        .unlockSenseiWithXp(currentKaijin!, sensei, totalXP, adjustSpendableXp);
+
+    if (success) {
+      // Mettre à jour localement le sensei sans attendre le rechargement
+      sensei.isUnlocked = true;
+      sensei.linkLevel = 1;
+
+      // Rafraîchir les listes de senseis
+      await loadPlayerSenseis();
+      updateState();
+    }
+  }
+
+  Future<void> upgradeSensei(Sensei sensei) async {
+    if (currentKaijin == null) return;
+
+    final success = await senseiService.upgradeSenseiWithXp(
+        currentKaijin!, sensei, totalXP, adjustSpendableXp);
+
+    if (success) {
+      // Mettre à jour localement le sensei sans attendre le rechargement
+      sensei.linkLevel += 1;
+
+      // Rafraîchir les listes de senseis
+      await loadPlayerSenseis();
       updateState();
     }
   }
@@ -144,6 +182,8 @@ class GameState {
 
   // Ajouter de l'XP et mettre à jour le niveau
   void addXP(int amount) {
+    if (amount <= 0) return;
+
     // Ajouter à l'XP dépensable (monnaie du jeu)
     totalXP += amount;
 
@@ -155,6 +195,13 @@ class GameState {
     updateState();
     updatePlayerLevel();
     calculatePower();
+  }
+
+  // Appliquer une dépense ou un remboursement d'XP sans toucher l'XP lifetime
+  void adjustSpendableXp(int amount) {
+    if (amount == 0) return;
+    totalXP = max(0, totalXP + amount);
+    updateState();
   }
 
   // Calculer la puissance
@@ -181,6 +228,8 @@ class GameState {
     }
 
     await loadCurrentKaijin();
+    await initDefaultResonances();
+    await initDefaultSenseis();
     await loadPlayerData();
     startTimers();
 
@@ -214,15 +263,15 @@ class GameState {
     currentKaijin = null;
 
     techniques.clear();
-    senseis.clear();
     playerTechniques = [];
-    playerSenseis = [];
     techniqueLevels = {};
-    senseiLevels = {};
-    senseiQuantities = {};
 
     allResonances = [];
     playerResonances = [];
+
+    allSenseis = [];
+    playerSenseis = [];
+
     offlineXpGained = 0;
     offlineXpClaimed = false;
 
@@ -303,19 +352,29 @@ class GameState {
     if (currentKaijin == null) return;
 
     try {
-      senseis = await senseiService.loadSenseis(currentKaijin!.id);
+      // Charger d'abord tous les senseis disponibles
+      allSenseis = await senseiService.getAllSenseis();
 
-      if (senseis.isNotEmpty && currentKaijin!.senseis.isNotEmpty) {
-        playerSenseis = senseiService.getPlayerSenseis(senseis, currentKaijin!);
-        senseiLevels = Map<String, int>.from(currentKaijin!.senseiLevels);
-        senseiQuantities =
-            Map<String, int>.from(currentKaijin!.senseiQuantities);
+      // Charger les senseis du joueur
+      playerSenseis = await senseiService.getKaijinSenseis(currentKaijin!.id);
 
-        updateState();
-        calculatePower();
-
-        print("Senseis du joueur chargés: ${playerSenseis.length}");
+      // Mettre à jour l'état de déverrouillage et le niveau des senseis dans allSenseis
+      for (var playerSensei in playerSenseis) {
+        final index = allSenseis.indexWhere((s) => s.id == playerSensei.id);
+        if (index != -1) {
+          // Mettre à jour l'état du sensei dans la liste principale
+          allSenseis[index].isUnlocked = playerSensei.isUnlocked;
+          allSenseis[index].linkLevel = playerSensei.linkLevel;
+        }
       }
+
+      updateState();
+      calculatePower();
+
+      print("Senseis du joueur chargés: ${playerSenseis.length}");
+      print("Total des senseis disponibles: ${allSenseis.length}");
+
+      await updatePassiveXpRate();
     } catch (e) {
       print("Erreur lors du chargement des senseis du joueur: $e");
     }
@@ -327,9 +386,7 @@ class GameState {
     timerService.startGameLoop(() {
       final xpGained = passiveXpService.generatePassiveXp();
       if (xpGained > 0) {
-        totalXP += xpGained;
-        updatePlayerLevel();
-        updateState();
+        addXP(xpGained);
       }
     });
 
@@ -380,11 +437,16 @@ class GameState {
     final DateTime referenceTime =
         currentKaijin!.previousLastConnected ?? currentKaijin!.lastConnected;
 
-    final offlineXp = await resonanceService.calculateOfflineXp(
+    // Calculer l'XP hors-ligne des résonances et des senseis
+    final resonanceOfflineXp = await resonanceService.calculateOfflineXp(
+        currentKaijin!.id, referenceTime);
+    final senseiOfflineXp = await senseiService.calculateOfflineXp(
         currentKaijin!.id, referenceTime);
 
-    if (offlineXp > 0) {
-      offlineXpGained = offlineXp;
+    final totalOfflineXp = resonanceOfflineXp + senseiOfflineXp;
+
+    if (totalOfflineXp > 0) {
+      offlineXpGained = totalOfflineXp;
       offlineXpClaimed = false;
       updateState();
     }
@@ -445,13 +507,22 @@ class GameState {
     if (currentKaijin == null) return;
 
     try {
-      final xpPerSecond = await resonanceService
+      // Calculer l'XP passive des résonances
+      final resonanceXpPerSecond = await resonanceService
           .calculateTotalPassiveXpPerSecond(currentKaijin!.id);
-      passiveXpService.xpPerSecond = xpPerSecond;
+
+      // Calculer l'XP passive des senseis
+      final senseiXpPerSecond = await senseiService
+          .calculateTotalPassiveXpPerSecond(currentKaijin!.id);
+
+      // Combiner les deux sources d'XP passive
+      final totalXpPerSecond = resonanceXpPerSecond + senseiXpPerSecond;
+
+      passiveXpService.xpPerSecond = totalXpPerSecond;
       updateState();
 
       print(
-          "Taux d'XP passive mis à jour: ${passiveXpService.xpPerSecond} XP/s, ${passiveXpService.passiveXpPerHour} XP/h");
+          "Taux d'XP passive mis à jour: ${passiveXpService.xpPerSecond} XP/s (Résonances: $resonanceXpPerSecond, Senseis: $senseiXpPerSecond), ${passiveXpService.passiveXpPerHour} XP/h");
     } catch (e) {
       print("Erreur lors de la mise à jour du taux d'XP passive: $e");
     }
@@ -468,10 +539,7 @@ class GameState {
   // Méthode pour incrémenter l'XP en cliquant
   void incrementerXp(int bonusXp, [double multiplier = 1.0]) {
     final int xpGain = comboService.registerClick(multiplier: multiplier);
-
-    totalXP += xpGain;
-    updatePlayerLevel();
-    updateState();
+    addXP(xpGain);
 
     timerService.startComboResetTimer(() {
       comboService.resetCombo();

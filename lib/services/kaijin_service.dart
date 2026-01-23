@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/kaijin.dart';
 import '../models/technique.dart';
-import '../models/sensei.dart';
 
 class KaijinService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -206,22 +205,16 @@ class KaijinService {
 
         if (kaijinDoc.exists) {
           final currentXp = kaijinDoc.data()?['xp'] as int? ?? 0;
+          final currentLifetimeXp =
+              kaijinDoc.data()?['totalLifetimeXp'] as int? ?? currentXp;
           final newXp = currentXp + amount;
+          final newLifetimeXp = currentLifetimeXp + (amount > 0 ? amount : 0);
 
-          // Mise à jour de l'XP
-          transaction.update(kaijinRef, {'xp': newXp});
-
-          // Vérifier si passage de niveau
-          final currentLevel = kaijinDoc.data()?['level'] as int? ?? 1;
-          final xpNeededForNextLevel = currentLevel * 100; // Formule simple
-
-          if (newXp >= xpNeededForNextLevel) {
-            // Passage de niveau
-            transaction.update(kaijinRef, {
-              'level': currentLevel + 1,
-              'xp': newXp - xpNeededForNextLevel
-            });
-          }
+          // Le niveau est calculé ailleurs via XpService, on maintient ici uniquement les compteurs.
+          transaction.update(kaijinRef, {
+            'xp': newXp,
+            'totalLifetimeXp': newLifetimeXp,
+          });
         }
       });
     } catch (e) {
@@ -305,105 +298,8 @@ class KaijinService {
     }
   }
 
-  // Récupérer les senseis d'un kaijin
-  Future<List<Sensei>> getKaijinSenseis(String kaijinId) async {
-    try {
-      final querySnapshot = await _firestore
-          .collection('kaijinSenseis')
-          .where('kaijinId', isEqualTo: kaijinId)
-          .get();
-
-      final senseiIds = querySnapshot.docs
-          .map((doc) => doc.data()['senseiId'] as String)
-          .toList();
-
-      if (senseiIds.isEmpty) return [];
-
-      // Récupérer les senseis
-      final senseis = <Sensei>[];
-      for (final id in senseiIds) {
-        final senseiDoc = await _firestore.collection('senseis').doc(id).get();
-
-        if (senseiDoc.exists) {
-          // Récupérer le niveau et la quantité depuis la relation
-          final relationDoc = querySnapshot.docs.firstWhere(
-            (doc) => doc.data()['senseiId'] == id,
-          );
-
-          final sensei = Sensei.fromFirestore(senseiDoc);
-          sensei.level = relationDoc.data()['level'] as int? ?? 1;
-          sensei.quantity = relationDoc.data()['quantity'] as int? ?? 0;
-
-          senseis.add(sensei);
-        }
-      }
-
-      return senseis;
-    } catch (e) {
-      print('Erreur lors de la récupération des senseis: $e');
-      return [];
-    }
-  }
-
-  // Ajouter un sensei à un kaijin
-  Future<void> addSenseiToKaijin(String kaijinId, String senseiId) async {
-    try {
-      // Vérifier si la relation existe déjà
-      final querySnapshot = await _firestore
-          .collection('kaijinSenseis')
-          .where('kaijinId', isEqualTo: kaijinId)
-          .where('senseiId', isEqualTo: senseiId)
-          .get();
-
-      if (querySnapshot.docs.isNotEmpty) {
-        // Le sensei existe déjà, augmenter sa quantité
-        final docId = querySnapshot.docs.first.id;
-        final currentQuantity =
-            querySnapshot.docs.first.data()['quantity'] as int? ?? 0;
-
-        await _firestore
-            .collection('kaijinSenseis')
-            .doc(docId)
-            .update({'quantity': currentQuantity + 1});
-      } else {
-        // Ajouter le nouveau sensei
-        await _firestore.collection('kaijinSenseis').add({
-          'kaijinId': kaijinId,
-          'senseiId': senseiId,
-          'level': 1,
-          'quantity': 1,
-        });
-      }
-    } catch (e) {
-      print('Erreur lors de l\'ajout du sensei: $e');
-      throw e;
-    }
-  }
-
-  // Améliorer un sensei
-  Future<void> upgradeSensei(String kaijinId, String senseiId) async {
-    try {
-      final querySnapshot = await _firestore
-          .collection('kaijinSenseis')
-          .where('kaijinId', isEqualTo: kaijinId)
-          .where('senseiId', isEqualTo: senseiId)
-          .get();
-
-      if (querySnapshot.docs.isNotEmpty) {
-        final docId = querySnapshot.docs.first.id;
-        final currentLevel =
-            querySnapshot.docs.first.data()['level'] as int? ?? 1;
-
-        await _firestore
-            .collection('kaijinSenseis')
-            .doc(docId)
-            .update({'level': currentLevel + 1});
-      }
-    } catch (e) {
-      print('Erreur lors de l\'amélioration du sensei: $e');
-      throw e;
-    }
-  }
+  // NOTE: Les méthodes liées aux senseis ont été déplacées vers SenseiService
+  // pour une meilleure séparation des responsabilités
 
   // Mettre à jour le niveau d'une technique du kaijin
   Future<void> updateKaijinTechnique(

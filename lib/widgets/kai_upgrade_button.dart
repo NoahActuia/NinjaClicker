@@ -49,8 +49,7 @@ class KaiUpgradeButton extends StatelessWidget {
   Widget build(BuildContext context) {
     if (isMaxLevel) {
       return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(
           color: KaiColors.accent.withOpacity(0.2),
           borderRadius: BorderRadius.circular(8),
@@ -78,7 +77,7 @@ class KaiUpgradeButton extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
-        minimumSize: const Size(double.infinity, 48),
+        minimumSize: const Size(120, 48),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,

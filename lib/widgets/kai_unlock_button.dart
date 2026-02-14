@@ -50,7 +50,7 @@ class KaiUnlockButton extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
-        minimumSize: const Size(double.infinity, 48),
+        minimumSize: const Size(120, 48),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,

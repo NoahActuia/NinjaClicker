@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../../models/technique.dart';
 import '../../models/kaijin_technique.dart';
-import '../../models/kaijin.dart';
+import '../../services/app_logger.dart';
 import '../../services/kaijin_service.dart';
 import '../../services/technique_service.dart';
 import '../../styles/kai_colors.dart';
@@ -87,7 +87,7 @@ class TechniqueTreeState {
         throw Exception('Aucun personnage trouvé pour l\'utilisateur');
       }
 
-      print(
+      AppLogger.info(
           'Kaijin sélectionné: ${currentKaijin.name} (dernière connexion: ${currentKaijin.lastConnected})');
 
       setState(() {
@@ -96,7 +96,7 @@ class TechniqueTreeState {
         _playerXp = currentKaijin.xp;
       });
     } catch (e) {
-      print('Erreur lors de la récupération du kaijin: $e');
+      AppLogger.error('Erreur lors de la récupération du kaijin', e);
       setState(() {
         _kaijinId = '';
         _kaijinName = 'Fracturé inconnu';
@@ -113,7 +113,7 @@ class TechniqueTreeState {
     try {
       // Vérifier que nous avons un ID de kaijin valide
       if (_kaijinId.isEmpty) {
-        print(
+        AppLogger.warning(
             'Aucun kaijin actif trouvé, impossible de charger les techniques');
         // Charger les techniques par défaut à la place
         await loadDefaultTechniques();
@@ -190,7 +190,7 @@ class TechniqueTreeState {
         _isLoading = false;
       });
     } catch (e) {
-      print('Erreur lors du chargement des techniques: $e');
+      AppLogger.error('Erreur lors du chargement des techniques', e);
 
       // En cas d'erreur, charger les techniques par défaut
       loadDefaultTechniques();
@@ -225,7 +225,7 @@ class TechniqueTreeState {
         _isLoading = false;
       });
     } catch (e) {
-      print('Erreur lors du chargement des techniques par défaut: $e');
+      AppLogger.error('Erreur lors du chargement des techniques par défaut', e);
       setState(() {
         _techniquesByLevel = {};
         _isLoading = false;
@@ -242,7 +242,7 @@ class TechniqueTreeState {
       TechniqueService techniqueService = TechniqueService();
       await techniqueService.addNewTechniquesIfNotExist();
     } catch (e) {
-      print('Erreur lors de la mise à jour des techniques: $e');
+      AppLogger.error('Erreur lors de la mise à jour des techniques', e);
     } finally {
       setState(() {
         _isLoading = false;
@@ -254,6 +254,10 @@ class TechniqueTreeState {
   Future<void> unlockTechnique(
       BuildContext context, Technique technique) async {
     try {
+      if (technique.xp_unlock_cost <= 0) {
+        throw Exception('ERR_INVALID_UNLOCK_COST');
+      }
+
       // Vérifier si le joueur a assez d'XP
       if (_playerXp < technique.xp_unlock_cost) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -267,16 +271,49 @@ class TechniqueTreeState {
       }
 
       if (_kaijinId.isEmpty) {
-        throw Exception('Aucun kaijin actif trouvé');
+        throw Exception('ERR_KAIJIN_NOT_FOUND');
       }
 
-      // 1. Déduire l'XP du kaijin en utilisant kaijinId correctement
-      await _firestore.collection('kaijins').doc(_kaijinId).update({
-        'xp': FieldValue.increment(-technique.xp_unlock_cost),
-      });
+      await _firestore.runTransaction((transaction) async {
+        final kaijinRef = _firestore.collection('kaijins').doc(_kaijinId);
+        final kaijinSnapshot = await transaction.get(kaijinRef);
+        if (!kaijinSnapshot.exists) {
+          throw Exception('ERR_KAIJIN_NOT_FOUND');
+        }
 
-      // 2. Créer la relation dans la table pivot kaijinTechniques
-      await _techniqueService.addTechniqueToKaijin(_kaijinId, technique.id);
+        final currentXp = kaijinSnapshot.data()?['xp'] as int? ?? 0;
+        if (currentXp < technique.xp_unlock_cost) {
+          throw Exception('ERR_NOT_ENOUGH_XP');
+        }
+
+        final relationQuery = await _firestore
+            .collection('kaijinTechniques')
+            .where('kaijinId', isEqualTo: _kaijinId)
+            .where('techniqueId', isEqualTo: technique.id)
+            .limit(1)
+            .get();
+
+        transaction.update(kaijinRef, {
+          'xp': currentXp - technique.xp_unlock_cost,
+        });
+
+        if (relationQuery.docs.isNotEmpty) {
+          transaction.update(relationQuery.docs.first.reference, {
+            'isActive': true,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        } else {
+          final newRelationRef = _firestore.collection('kaijinTechniques').doc();
+          transaction.set(newRelationRef, {
+            'kaijinId': _kaijinId,
+            'techniqueId': technique.id,
+            'level': 1,
+            'isActive': true,
+            'acquiredAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      });
 
       // 3. Mettre à jour notre map locale des techniques débloquées
       setState(() {
@@ -294,10 +331,11 @@ class TechniqueTreeState {
         ),
       );
     } catch (e) {
-      print('Erreur lors du débloquage de la technique: $e');
+      AppLogger.error('Erreur lors du débloquage de la technique', e);
+      final message = _mapTechniqueErrorToMessage(e);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erreur lors du débloquage de la technique'),
+          content: Text(message),
           backgroundColor: KaiColors.error,
         ),
       );
@@ -308,6 +346,10 @@ class TechniqueTreeState {
   Future<void> upgradeTechnique(BuildContext context, Technique technique,
       int currentLevel, int upgradeCost) async {
     try {
+      if (upgradeCost <= 0) {
+        throw Exception('ERR_INVALID_UPGRADE_COST');
+      }
+
       // Vérifier si le joueur a assez d'XP
       if (_playerXp < upgradeCost) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -321,18 +363,46 @@ class TechniqueTreeState {
       }
 
       if (_kaijinId.isEmpty) {
-        throw Exception('Aucun kaijin actif trouvé');
+        throw Exception('ERR_KAIJIN_NOT_FOUND');
       }
 
       final newLevel = currentLevel + 1;
 
-      // 1. Améliorer la technique via le service
-      await _techniqueService.upgradeTechnique(
-          _kaijinId, technique.id, newLevel);
+      await _firestore.runTransaction((transaction) async {
+        final kaijinRef = _firestore.collection('kaijins').doc(_kaijinId);
+        final kaijinSnapshot = await transaction.get(kaijinRef);
+        if (!kaijinSnapshot.exists) {
+          throw Exception('ERR_KAIJIN_NOT_FOUND');
+        }
 
-      // 2. Déduire l'XP du kaijin
-      await _firestore.collection('kaijins').doc(_kaijinId).update({
-        'xp': FieldValue.increment(-upgradeCost),
+        final currentXp = kaijinSnapshot.data()?['xp'] as int? ?? 0;
+        if (currentXp < upgradeCost) {
+          throw Exception('ERR_NOT_ENOUGH_XP');
+        }
+
+        final relationQuery = await _firestore
+            .collection('kaijinTechniques')
+            .where('kaijinId', isEqualTo: _kaijinId)
+            .where('techniqueId', isEqualTo: technique.id)
+            .where('isActive', isEqualTo: true)
+            .limit(1)
+            .get();
+
+        if (relationQuery.docs.isEmpty) {
+          throw Exception('ERR_TECHNIQUE_NOT_UNLOCKED');
+        }
+
+        final relationRef = relationQuery.docs.first.reference;
+        final storedLevel = relationQuery.docs.first.data()['level'] as int? ?? 1;
+        final targetLevel = storedLevel >= newLevel ? storedLevel + 1 : newLevel;
+
+        transaction.update(kaijinRef, {
+          'xp': currentXp - upgradeCost,
+        });
+        transaction.update(relationRef, {
+          'level': targetLevel,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       });
 
       // 3. Jouer le son d'amélioration
@@ -355,10 +425,11 @@ class TechniqueTreeState {
 
       // Ne pas fermer la modale, elle sera mise à jour à la prochaine ouverture
     } catch (e) {
-      print('Erreur lors de l\'amélioration de la technique: $e');
+      AppLogger.error('Erreur lors de l\'amélioration de la technique', e);
+      final message = _mapTechniqueErrorToMessage(e);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erreur lors de l\'amélioration de la technique'),
+          content: Text(message),
           backgroundColor: KaiColors.error,
         ),
       );
@@ -370,5 +441,23 @@ class TechniqueTreeState {
       String techniqueId) async {
     return await _techniqueService.getKaijinTechniquesForTechnique(
         _kaijinId, techniqueId);
+  }
+
+  String _mapTechniqueErrorToMessage(Object error) {
+    final raw = error.toString();
+    if (raw.contains('ERR_NOT_ENOUGH_XP')) {
+      return 'XP insuffisante pour cette action.';
+    }
+    if (raw.contains('ERR_KAIJIN_NOT_FOUND')) {
+      return 'Kaijin introuvable. Recharge la session.';
+    }
+    if (raw.contains('ERR_TECHNIQUE_NOT_UNLOCKED')) {
+      return 'Technique non débloquée pour ce personnage.';
+    }
+    if (raw.contains('ERR_INVALID_UNLOCK_COST') ||
+        raw.contains('ERR_INVALID_UPGRADE_COST')) {
+      return 'Coût invalide détecté. Réessaie après synchronisation.';
+    }
+    return 'Une erreur est survenue pendant l\'opération.';
   }
 }

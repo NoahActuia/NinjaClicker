@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/resonance.dart';
 import '../models/kaijin.dart';
 import 'audio_service.dart';
+import 'app_logger.dart';
 
 class ResonanceService {
   // Singleton pattern
@@ -18,7 +19,7 @@ class ResonanceService {
       final snapshot = await _firestore.collection('resonances').get();
       return snapshot.docs.map((doc) => Resonance.fromFirestore(doc)).toList();
     } catch (e) {
-      print('Erreur lors du chargement des Résonances: $e');
+      AppLogger.error('Erreur lors du chargement des Résonances', e);
       return [];
     }
   }
@@ -65,15 +66,19 @@ class ResonanceService {
         return resonance;
       }).toList();
     } catch (e) {
-      print('Erreur lors du chargement des Résonances du kaijin: $e');
+      AppLogger.error('Erreur lors du chargement des Résonances du kaijin', e);
       return [];
     }
   }
 
   // Débloquer une Résonance avec gestion d'XP
-  Future<bool> unlockResonanceWithXp(Kaijin kaijin, Resonance resonance,
+  Future<String?> unlockResonanceWithXp(Kaijin kaijin, Resonance resonance,
       int totalXP, Function(int) updateXP) async {
-    if (totalXP < resonance.xpCostToUnlock) return false;
+    if (resonance.xpCostToUnlock <= 0) {
+      AppLogger.warning('Coût de déblocage invalide pour la résonance ${resonance.id}');
+      return 'ERR_INVALID_UNLOCK_COST';
+    }
+    if (totalXP < resonance.xpCostToUnlock) return 'ERR_NOT_ENOUGH_XP';
 
     updateXP(-resonance.xpCostToUnlock);
 
@@ -82,33 +87,37 @@ class ResonanceService {
 
       if (success) {
         _audioService.playSound('unlock.mp3');
-        return true;
+        return null;
       } else {
         // En cas d'échec, rembourser l'XP dépensé
         updateXP(resonance.xpCostToUnlock);
-        return false;
+        return 'ERR_UNLOCK_FAILED';
       }
     } catch (e) {
-      print('Erreur lors du déblocage de la résonance: $e');
+      AppLogger.error('Erreur lors du déblocage de la résonance', e);
       // Rembourser l'XP en cas d'erreur
       updateXP(resonance.xpCostToUnlock);
-      return false;
+      return 'ERR_UNLOCK_EXCEPTION';
     }
   }
 
   // Améliorer une Résonance avec gestion d'XP
-  Future<bool> upgradeResonanceWithXp(Kaijin kaijin, Resonance resonance,
+  Future<String?> upgradeResonanceWithXp(Kaijin kaijin, Resonance resonance,
       int totalXP, Function(int) updateXP) async {
-    if (!resonance.isUnlocked) return false;
+    if (!resonance.isUnlocked) return 'ERR_NOT_UNLOCKED';
 
     if (resonance.linkLevel >= resonance.maxLinkLevel) {
-      print(
+      AppLogger.warning(
           'Cette résonance a déjà atteint son niveau maximum (${resonance.maxLinkLevel})');
-      return false;
+      return 'ERR_MAX_LEVEL_REACHED';
     }
 
     final upgradeCost = resonance.getUpgradeCost();
-    if (totalXP < upgradeCost) return false;
+    if (upgradeCost <= 0) {
+      AppLogger.warning('Coût d\'amélioration invalide pour la résonance ${resonance.id}');
+      return 'ERR_INVALID_UPGRADE_COST';
+    }
+    if (totalXP < upgradeCost) return 'ERR_NOT_ENOUGH_XP';
 
     updateXP(-upgradeCost);
     int originalLevel = resonance.linkLevel;
@@ -119,19 +128,19 @@ class ResonanceService {
 
       if (success) {
         _audioService.playSound('upgrade.mp3');
-        return true;
+        return null;
       } else {
         // En cas d'échec, rembourser l'XP dépensé et restaurer le niveau
         updateXP(upgradeCost);
         resonance.linkLevel = originalLevel;
-        return false;
+        return 'ERR_UPGRADE_FAILED';
       }
     } catch (e) {
-      print('Erreur lors de l\'amélioration de la résonance: $e');
+      AppLogger.error('Erreur lors de l\'amélioration de la résonance', e);
       // Rembourser l'XP et restaurer le niveau en cas d'erreur
       updateXP(upgradeCost);
       resonance.linkLevel = originalLevel;
-      return false;
+      return 'ERR_UPGRADE_EXCEPTION';
     }
   }
 
@@ -166,7 +175,7 @@ class ResonanceService {
 
       return true;
     } catch (e) {
-      print('Erreur lors du déblocage de la Résonance: $e');
+      AppLogger.error('Erreur lors du déblocage de la Résonance', e);
       return false;
     }
   }
@@ -183,7 +192,7 @@ class ResonanceService {
           .get();
 
       if (relationQuery.docs.isEmpty) {
-        print('Relation kaijin-résonance non trouvée');
+        AppLogger.warning('Relation kaijin-résonance non trouvée');
         return false;
       }
 
@@ -191,13 +200,13 @@ class ResonanceService {
       final resonanceDoc =
           await _firestore.collection('resonances').doc(resonance.id).get();
       if (!resonanceDoc.exists) {
-        print('Résonance non trouvée dans Firestore');
+        AppLogger.warning('Résonance non trouvée dans Firestore');
         return false;
       }
 
       final resonanceData = resonanceDoc.data();
       if (resonanceData == null) {
-        print('Données de résonance invalides');
+        AppLogger.warning('Données de résonance invalides');
         return false;
       }
 
@@ -210,7 +219,7 @@ class ResonanceService {
 
       // Vérifier que le niveau futur ne dépasse pas le maximum
       if (currentLinkLevel >= maxLinkLevel) {
-        print(
+        AppLogger.warning(
             'Niveau maximum déjà atteint pour cette résonance: $currentLinkLevel / $maxLinkLevel');
         return false;
       }
@@ -230,7 +239,7 @@ class ResonanceService {
 
       return true;
     } catch (e) {
-      print('Erreur lors de l\'amélioration du lien de Résonance: $e');
+      AppLogger.error('Erreur lors de l\'amélioration du lien de Résonance', e);
       return false;
     }
   }
@@ -249,7 +258,7 @@ class ResonanceService {
 
       return totalXpPerSecond;
     } catch (e) {
-      print('Erreur lors du calcul de l\'XP passive totale: $e');
+      AppLogger.error('Erreur lors du calcul de l\'XP passive totale', e);
       return 0.0;
     }
   }
@@ -270,7 +279,7 @@ class ResonanceService {
 
       return (xpPerSecond * seconds).toInt();
     } catch (e) {
-      print('Erreur lors du calcul de l\'XP hors-ligne: $e');
+      AppLogger.error('Erreur lors du calcul de l\'XP hors-ligne', e);
       return 0;
     }
   }
@@ -284,7 +293,7 @@ class ResonanceService {
       // Vérifier si les résonances existent déjà
       final existingResonances = await getAllResonances();
       if (existingResonances.isNotEmpty) {
-        print('Les résonances existent déjà, pas besoin de les initialiser');
+        AppLogger.info('Les résonances existent déjà, pas besoin de les initialiser');
         return;
       }
 
@@ -347,10 +356,11 @@ class ResonanceService {
         await _firestore.collection('resonances').add(resonance);
       }
 
-      print(
+      AppLogger.info(
           '${defaultResonances.length} résonances par défaut ont été initialisées');
     } catch (e) {
-      print('Erreur lors de l\'initialisation des résonances par défaut: $e');
+      AppLogger.error(
+          'Erreur lors de l\'initialisation des résonances par défaut', e);
     }
   }
 
@@ -378,11 +388,11 @@ class ResonanceService {
 
       if (updatedCount > 0) {
         await batch.commit();
-        print(
+        AppLogger.info(
             'Migration résonances: $updatedCount document(s) mis à jour vers xpCostToUpgradeLink');
       }
     } catch (e) {
-      print('Erreur migration résonances legacy: $e');
+      AppLogger.error('Erreur migration résonances legacy', e);
     }
   }
 }

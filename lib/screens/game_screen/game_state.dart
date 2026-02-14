@@ -15,6 +15,7 @@ import '../../services/timer_service.dart';
 import '../../services/power_service.dart';
 import '../../services/sensei_service.dart';
 import '../../services/technique_service.dart';
+import '../../services/app_logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// Classe qui gère l'état du jeu et les interactions avec les services
@@ -81,7 +82,7 @@ class GameState {
       await resonanceService.initDefaultResonances();
       await loadPlayerResonances();
     } catch (e) {
-      print('Erreur lors de l\'initialisation des résonances: $e');
+      AppLogger.error('Erreur lors de l\'initialisation des résonances', e);
     }
   }
 
@@ -90,18 +91,18 @@ class GameState {
       await senseiService.initDefaultSenseis();
       await loadPlayerSenseis();
     } catch (e) {
-      print('Erreur lors de l\'initialisation des senseis: $e');
+      AppLogger.error('Erreur lors de l\'initialisation des senseis', e);
     }
   }
 
   // Méthodes pour les résonances
-  Future<void> unlockResonance(Resonance resonance) async {
-    if (currentKaijin == null) return;
+  Future<String?> unlockResonance(Resonance resonance) async {
+    if (currentKaijin == null) return 'ERR_KAIJIN_NOT_FOUND';
 
-    final success = await resonanceService.unlockResonanceWithXp(
+    final errorCode = await resonanceService.unlockResonanceWithXp(
         currentKaijin!, resonance, totalXP, adjustSpendableXp);
 
-    if (success) {
+    if (errorCode == null) {
       // Mettre à jour localement la résonance sans attendre le rechargement
       resonance.isUnlocked = true;
       resonance.linkLevel = 1;
@@ -110,32 +111,31 @@ class GameState {
       await loadPlayerResonances();
       updateState();
     }
+    return errorCode;
   }
 
-  Future<void> upgradeResonance(Resonance resonance) async {
-    if (currentKaijin == null) return;
+  Future<String?> upgradeResonance(Resonance resonance) async {
+    if (currentKaijin == null) return 'ERR_KAIJIN_NOT_FOUND';
 
-    final success = await resonanceService.upgradeResonanceWithXp(
+    final errorCode = await resonanceService.upgradeResonanceWithXp(
         currentKaijin!, resonance, totalXP, adjustSpendableXp);
 
-    if (success) {
-      // Mettre à jour localement la résonance sans attendre le rechargement
-      resonance.linkLevel += 1;
-
+    if (errorCode == null) {
       // Rafraîchir les listes de résonances
       await loadPlayerResonances();
       updateState();
     }
+    return errorCode;
   }
 
   // Méthodes pour les senseis
-  Future<void> unlockSensei(Sensei sensei) async {
-    if (currentKaijin == null) return;
+  Future<String?> unlockSensei(Sensei sensei) async {
+    if (currentKaijin == null) return 'ERR_KAIJIN_NOT_FOUND';
 
-    final success = await senseiService
+    final errorCode = await senseiService
         .unlockSenseiWithXp(currentKaijin!, sensei, totalXP, adjustSpendableXp);
 
-    if (success) {
+    if (errorCode == null) {
       // Mettre à jour localement le sensei sans attendre le rechargement
       sensei.isUnlocked = true;
       sensei.linkLevel = 1;
@@ -144,22 +144,21 @@ class GameState {
       await loadPlayerSenseis();
       updateState();
     }
+    return errorCode;
   }
 
-  Future<void> upgradeSensei(Sensei sensei) async {
-    if (currentKaijin == null) return;
+  Future<String?> upgradeSensei(Sensei sensei) async {
+    if (currentKaijin == null) return 'ERR_KAIJIN_NOT_FOUND';
 
-    final success = await senseiService.upgradeSenseiWithXp(
+    final errorCode = await senseiService.upgradeSenseiWithXp(
         currentKaijin!, sensei, totalXP, adjustSpendableXp);
 
-    if (success) {
-      // Mettre à jour localement le sensei sans attendre le rechargement
-      sensei.linkLevel += 1;
-
+    if (errorCode == null) {
       // Rafraîchir les listes de senseis
       await loadPlayerSenseis();
       updateState();
     }
+    return errorCode;
   }
 
   // Mettre à jour le niveau basé sur l'XP totale
@@ -189,6 +188,7 @@ class GameState {
 
     // Toujours incrémenter l'XP totale accumulée dans le kaijin
     if (currentKaijin != null) {
+      currentKaijin!.xp = totalXP;
       currentKaijin!.totalLifetimeXp += amount;
     }
 
@@ -201,6 +201,9 @@ class GameState {
   void adjustSpendableXp(int amount) {
     if (amount == 0) return;
     totalXP = max(0, totalXP + amount);
+    if (currentKaijin != null) {
+      currentKaijin!.xp = totalXP;
+    }
     updateState();
   }
 
@@ -218,12 +221,12 @@ class GameState {
 
   // Initialisation du jeu
   Future<void> initializeGame() async {
-    print('Initialisation du jeu...');
+    AppLogger.info('Initialisation du jeu...');
     resetGameState();
 
     User? user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      print('Utilisateur non connecté');
+      AppLogger.warning('Utilisateur non connecté');
       return;
     }
 
@@ -233,7 +236,7 @@ class GameState {
     await loadPlayerData();
     startTimers();
 
-    print('Jeu initialisé avec succès');
+    AppLogger.info('Jeu initialisé avec succès');
   }
 
   // Chargement centralisé des données du joueur
@@ -314,13 +317,13 @@ class GameState {
 
           updateState();
 
-          print(
+          AppLogger.info(
               'Kaijin chargé: ${currentKaijin!.name} (Niveau ${currentKaijin!.level}, XP: ${currentKaijin!.xp}, XP totale accumulée: ${currentKaijin!.totalLifetimeXp})');
         } else {
-          print('Aucun kaijin trouvé pour l\'utilisateur');
+          AppLogger.warning('Aucun kaijin trouvé pour l\'utilisateur');
         }
       } catch (e) {
-        print('Erreur lors du chargement du kaijin: $e');
+        AppLogger.error('Erreur lors du chargement du kaijin', e);
       }
     }
   }
@@ -340,10 +343,10 @@ class GameState {
         updateState();
         calculatePower();
 
-        print("Techniques du joueur chargées: ${playerTechniques.length}");
+        AppLogger.info("Techniques du joueur chargées: ${playerTechniques.length}");
       }
     } catch (e) {
-      print("Erreur lors du chargement des techniques du joueur: $e");
+      AppLogger.error("Erreur lors du chargement des techniques du joueur", e);
     }
   }
 
@@ -371,12 +374,12 @@ class GameState {
       updateState();
       calculatePower();
 
-      print("Senseis du joueur chargés: ${playerSenseis.length}");
-      print("Total des senseis disponibles: ${allSenseis.length}");
+      AppLogger.info("Senseis du joueur chargés: ${playerSenseis.length}");
+      AppLogger.info("Total des senseis disponibles: ${allSenseis.length}");
 
       await updatePassiveXpRate();
     } catch (e) {
-      print("Erreur lors du chargement des senseis du joueur: $e");
+      AppLogger.error("Erreur lors du chargement des senseis du joueur", e);
     }
   }
 
@@ -393,7 +396,7 @@ class GameState {
     // Timer pour la sauvegarde automatique
     timerService.startAutoSave(() async {
       await saveGame(updateConnections: false);
-      print('Sauvegarde automatique effectuée');
+      AppLogger.info('Sauvegarde automatique effectuée');
     });
   }
 
@@ -422,11 +425,11 @@ class GameState {
         }
 
         await kaijinService.updateKaijin(currentKaijin!);
-        print(
+        AppLogger.info(
             'Kaijin sauvegardé: ${currentKaijin!.name} (XP: ${currentKaijin!.xp}, Niveau: ${currentKaijin!.level}, XP totale accumulée: ${currentKaijin!.totalLifetimeXp})');
       }
     } catch (e) {
-      print('Erreur lors de la sauvegarde: $e');
+      AppLogger.error('Erreur lors de la sauvegarde', e);
     }
   }
 
@@ -493,12 +496,12 @@ class GameState {
 
       updateState();
 
-      print("Résonances du joueur chargées: ${playerResonances.length}");
-      print("Total des résonances disponibles: ${allResonances.length}");
+      AppLogger.info("Résonances du joueur chargées: ${playerResonances.length}");
+      AppLogger.info("Total des résonances disponibles: ${allResonances.length}");
 
       await updatePassiveXpRate();
     } catch (e) {
-      print("Erreur lors du chargement des résonances du joueur: $e");
+      AppLogger.error("Erreur lors du chargement des résonances du joueur", e);
     }
   }
 
@@ -521,10 +524,10 @@ class GameState {
       passiveXpService.xpPerSecond = totalXpPerSecond;
       updateState();
 
-      print(
+      AppLogger.info(
           "Taux d'XP passive mis à jour: ${passiveXpService.xpPerSecond} XP/s (Résonances: $resonanceXpPerSecond, Senseis: $senseiXpPerSecond), ${passiveXpService.passiveXpPerHour} XP/h");
     } catch (e) {
-      print("Erreur lors de la mise à jour du taux d'XP passive: $e");
+      AppLogger.error("Erreur lors de la mise à jour du taux d'XP passive", e);
     }
   }
 
@@ -562,7 +565,7 @@ class GameState {
         updatePlayerLevel();
       }
     } catch (e) {
-      print('Erreur lors du rafraîchissement des données du Kaijin: $e');
+      AppLogger.error('Erreur lors du rafraîchissement des données du Kaijin', e);
     }
   }
 

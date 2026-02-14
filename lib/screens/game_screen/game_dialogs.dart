@@ -14,7 +14,7 @@ void showOfflineXpDialog({
     builder: (context) => AlertDialog(
       title: const Text('XP Passive Accumulée'),
       content: Text(
-        'Pendant votre absence, vos Résonances ont généré $xpGained XP!',
+        'Pendant votre absence, vos Résonances et Senseis ont généré $xpGained XP!',
         style: const TextStyle(fontSize: 16),
       ),
       actions: [

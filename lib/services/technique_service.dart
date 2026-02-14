@@ -3,6 +3,7 @@ import '../models/technique.dart';
 import '../models/kaijin_technique.dart';
 import '../models/kaijin.dart';
 import 'kaijin_service.dart';
+import 'app_logger.dart';
 
 /// Service qui gère toutes les opérations liées aux techniques
 class TechniqueService {
@@ -937,16 +938,20 @@ class TechniqueService {
   Future<bool> unlockTechnique(Kaijin kaijin, Technique technique, int totalXP,
       Function(int) updateXP) async {
     final cost = technique.xp_unlock_cost;
+    if (cost <= 0) {
+      AppLogger.warning('Coût de déblocage invalide pour la technique ${technique.id}');
+      return false;
+    }
     if (totalXP < cost) return false;
 
     updateXP(-cost);
 
     try {
       await kaijinService.addTechniqueToKaijin(kaijin.id, technique.id);
-      print('Technique ${technique.nom} débloquée pour ${kaijin.name}');
+      AppLogger.info('Technique ${technique.nom} débloquée pour ${kaijin.name}');
       return true;
     } catch (e) {
-      print('Erreur lors du déblocage de la technique: $e');
+      AppLogger.error('Erreur lors du déblocage de la technique', e);
       updateXP(cost); // Rembourser l'XP
       return false;
     }
@@ -956,6 +961,11 @@ class TechniqueService {
   Future<bool> upgradeTechniqueWithXp(Kaijin kaijin, Technique technique,
       int totalXP, Function(int) updateXP) async {
     final upgradeCost = calculateUpgradeCost(technique);
+    if (upgradeCost <= 0) {
+      AppLogger.warning(
+          'Coût d\'amélioration invalide pour la technique ${technique.id}');
+      return false;
+    }
     if (totalXP < upgradeCost) return false;
 
     updateXP(-upgradeCost);
@@ -965,11 +975,11 @@ class TechniqueService {
     try {
       // Mettre à jour le niveau de la technique dans la relation kaijin-technique
       await upgradeTechnique(kaijin.id, technique.id, technique.niveau);
-      print(
+      AppLogger.info(
           'Technique ${technique.nom} améliorée au niveau ${technique.niveau}');
       return true;
     } catch (e) {
-      print('Erreur lors de l\'amélioration de la technique: $e');
+      AppLogger.error('Erreur lors de l\'amélioration de la technique', e);
       technique.niveau = originalLevel;
       updateXP(upgradeCost); // Rembourser l'XP
       return false;

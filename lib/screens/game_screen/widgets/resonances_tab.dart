@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../game_state.dart';
 import '../../../styles/kai_colors.dart';
-import '../../../styles/kai_text_styles.dart';
 import '../../../models/resonance.dart';
 import 'resonances_tab_components/resonance_header.dart';
 import 'resonances_tab_components/resonance_card.dart';
@@ -10,8 +9,8 @@ class ResonancesTab extends StatefulWidget {
   final GameState gameState;
   final int totalXP;
   final List<Resonance> resonances;
-  final Function(Resonance) onUnlockResonance;
-  final Function(Resonance) onUpgradeResonance;
+  final Future<String?> Function(Resonance) onUnlockResonance;
+  final Future<String?> Function(Resonance) onUpgradeResonance;
   final Function() onRefresh;
 
   const ResonancesTab({
@@ -57,7 +56,7 @@ class _ResonancesTabState extends State<ResonancesTab> {
       isLoading = true;
     });
 
-    await widget.onUnlockResonance(resonance);
+    final errorCode = await widget.onUnlockResonance(resonance);
 
     // Rafraîchir la liste des résonances
     await widget.onRefresh();
@@ -67,6 +66,15 @@ class _ResonancesTabState extends State<ResonancesTab> {
       // Rafraîchir la liste locale
       currentResonances = List<Resonance>.from(widget.resonances);
     });
+
+    if (errorCode != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_mapErrorToMessage(errorCode)),
+          backgroundColor: KaiColors.error,
+        ),
+      );
+    }
   }
 
   // Wrapper pour améliorer une résonance avec gestion d'état
@@ -75,7 +83,7 @@ class _ResonancesTabState extends State<ResonancesTab> {
       isLoading = true;
     });
 
-    await widget.onUpgradeResonance(resonance);
+    final errorCode = await widget.onUpgradeResonance(resonance);
 
     // Rafraîchir la liste des résonances
     await widget.onRefresh();
@@ -85,6 +93,33 @@ class _ResonancesTabState extends State<ResonancesTab> {
       // Rafraîchir la liste locale
       currentResonances = List<Resonance>.from(widget.resonances);
     });
+
+    if (errorCode != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_mapErrorToMessage(errorCode)),
+          backgroundColor: KaiColors.error,
+        ),
+      );
+    }
+  }
+
+  String _mapErrorToMessage(String code) {
+    switch (code) {
+      case 'ERR_NOT_ENOUGH_XP':
+        return 'XP insuffisante pour cette action.';
+      case 'ERR_KAIJIN_NOT_FOUND':
+        return 'Kaijin introuvable. Recharge la session.';
+      case 'ERR_NOT_UNLOCKED':
+        return 'Résonance non débloquée.';
+      case 'ERR_MAX_LEVEL_REACHED':
+        return 'Niveau maximum déjà atteint.';
+      case 'ERR_INVALID_UNLOCK_COST':
+      case 'ERR_INVALID_UPGRADE_COST':
+        return 'Coût invalide détecté. Réessaie après synchronisation.';
+      default:
+        return 'Action impossible pour le moment.';
+    }
   }
 
   @override

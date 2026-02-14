@@ -89,7 +89,11 @@ class _GameScreenMainContentState extends State<GameScreenMainContent> {
                     resonancesCount: widget.gameState.playerResonances
                         .where((r) => r.isUnlocked)
                         .length,
+                    senseisCount: widget.gameState.playerSenseis
+                        .where((s) => s.isUnlocked)
+                        .length,
                     hasResonances: widget.gameState.playerResonances.isNotEmpty,
+                    hasSenseis: widget.gameState.playerSenseis.isNotEmpty,
                   ),
 
                   // Bouton kai
@@ -126,9 +130,10 @@ class _GameScreenMainContentState extends State<GameScreenMainContent> {
                   SenseisTab(
                     gameState: widget.gameState,
                     totalXP: widget.gameState.totalXP,
-                    senseis: widget.gameState.senseis,
-                    onUpdateState: () => setState(() {}),
-                    currentKaijin: widget.gameState.currentKaijin,
+                    senseis: widget.gameState.allSenseis,
+                    onUnlockSensei: widget.gameState.unlockSensei,
+                    onUpgradeSensei: widget.gameState.upgradeSensei,
+                    onRefresh: widget.gameState.loadPlayerSenseis,
                   ),
                 ],
               ),
@@ -144,13 +149,17 @@ class _GameScreenMainContentState extends State<GameScreenMainContent> {
 class PassiveXpIndicator extends StatelessWidget {
   final double xpPerSecond;
   final int resonancesCount;
+  final int senseisCount;
   final bool hasResonances;
+  final bool hasSenseis;
 
   const PassiveXpIndicator({
     Key? key,
     required this.xpPerSecond,
     required this.resonancesCount,
+    required this.senseisCount,
     required this.hasResonances,
+    required this.hasSenseis,
   }) : super(key: key);
 
   @override
@@ -199,15 +208,47 @@ class PassiveXpIndicator extends StatelessWidget {
               ),
             ],
           ),
-          if (hasResonances) ...[
+          if (hasResonances || hasSenseis) ...[
             const SizedBox(height: 4),
-            Text(
-              'Somme des résonances actives ($resonancesCount)',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey[600],
-                fontStyle: FontStyle.italic,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (hasResonances) ...[
+                  Icon(Icons.auto_fix_high, size: 12, color: Colors.grey[600]),
+                  const SizedBox(width: 2),
+                  Text(
+                    '$resonancesCount Résonances',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+                if (hasResonances && hasSenseis) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '•',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                if (hasSenseis) ...[
+                  Icon(Icons.school, size: 12, color: Colors.grey[600]),
+                  const SizedBox(width: 2),
+                  Text(
+                    '$senseisCount Senseis',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ],
         ],

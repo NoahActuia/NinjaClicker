@@ -48,9 +48,9 @@ class PowerService {
     int totalPower = 0;
 
     for (var sensei in senseis) {
-      if (sensei.quantity > 0) {
-        // Formule : (niveau * 10) * (quantité)^0.5
-        totalPower += (sensei.level * 10) * (sensei.quantity * 0.5).ceil();
+      if (sensei.isUnlocked) {
+        // Nouvelle formule basée sur le lien avec le sensei
+        totalPower += sensei.calculatePower();
       }
     }
 
@@ -91,9 +91,9 @@ class PowerService {
 
       case 'sensei':
         Sensei sensei = item;
-        sensei.level++;
+        sensei.linkLevel++;
         int newPower = calculateSenseiPower([sensei]);
-        sensei.level--;
+        sensei.linkLevel--;
         return newPower - currentPower;
 
       case 'resonance':

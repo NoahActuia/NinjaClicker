@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/kaijin.dart';
 import '../models/technique.dart';
+import 'app_logger.dart';
 
 class KaijinService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -45,7 +46,7 @@ class KaijinService {
       // Retourner le kaijin
       return Kaijin.fromFirestore(kaijinDoc);
     } catch (e) {
-      print('Erreur lors de la création du kaijin: $e');
+      AppLogger.error('Erreur lors de la création du kaijin', e);
       throw e;
     }
   }
@@ -66,7 +67,7 @@ class KaijinService {
       // Retourner le kaijin le plus récemment connecté
       return kaijins.first;
     } catch (e) {
-      print('Erreur lors de la récupération du kaijin actuel: $e');
+      AppLogger.error('Erreur lors de la récupération du kaijin actuel', e);
       return null;
     }
   }
@@ -83,7 +84,7 @@ class KaijinService {
           .map((doc) => Kaijin.fromFirestore(doc))
           .toList();
     } catch (e) {
-      print('Erreur lors de la récupération des kaijins: $e');
+      AppLogger.error('Erreur lors de la récupération des kaijins', e);
       return [];
     }
   }
@@ -98,7 +99,7 @@ class KaijinService {
         return Kaijin.fromFirestore(kaijinDoc);
       }
     } catch (e) {
-      print('Erreur lors de la récupération du kaijin: $e');
+      AppLogger.error('Erreur lors de la récupération du kaijin', e);
     }
     return null;
   }
@@ -138,7 +139,7 @@ class KaijinService {
 
       return limitedKaijins;
     } catch (e) {
-      print('Erreur lors de la récupération du classement des kaijins: $e');
+      AppLogger.error('Erreur lors de la récupération du classement des kaijins', e);
       return [];
     }
   }
@@ -175,10 +176,10 @@ class KaijinService {
       // 3. Supprimer le kaijin lui-même
       await _firestore.collection('kaijins').doc(kaijinId).delete();
 
-      print('Kaijin et ses relations supprimés avec succès');
+      AppLogger.info('Kaijin et ses relations supprimés avec succès');
       return true;
     } catch (e) {
-      print('Erreur lors de la suppression du kaijin: $e');
+      AppLogger.error('Erreur lors de la suppression du kaijin', e);
       return false;
     }
   }
@@ -191,7 +192,7 @@ class KaijinService {
           .doc(kaijin.id)
           .update(kaijin.toFirestore());
     } catch (e) {
-      print('Erreur lors de la mise à jour du kaijin: $e');
+      AppLogger.error('Erreur lors de la mise à jour du kaijin', e);
       throw e;
     }
   }
@@ -207,7 +208,7 @@ class KaijinService {
           final currentXp = kaijinDoc.data()?['xp'] as int? ?? 0;
           final currentLifetimeXp =
               kaijinDoc.data()?['totalLifetimeXp'] as int? ?? currentXp;
-          final newXp = currentXp + amount;
+          final newXp = (currentXp + amount) < 0 ? 0 : (currentXp + amount);
           final newLifetimeXp = currentLifetimeXp + (amount > 0 ? amount : 0);
 
           // Le niveau est calculé ailleurs via XpService, on maintient ici uniquement les compteurs.
@@ -218,7 +219,7 @@ class KaijinService {
         }
       });
     } catch (e) {
-      print('Erreur lors de l\'ajout d\'XP: $e');
+      AppLogger.error('Erreur lors de l\'ajout d\'XP', e);
       throw e;
     }
   }
@@ -258,7 +259,7 @@ class KaijinService {
 
       return techniques;
     } catch (e) {
-      print('Erreur lors de la récupération des techniques: $e');
+      AppLogger.error('Erreur lors de la récupération des techniques', e);
       return [];
     }
   }
@@ -293,7 +294,7 @@ class KaijinService {
         });
       }
     } catch (e) {
-      print('Erreur lors de l\'ajout de la technique: $e');
+      AppLogger.error('Erreur lors de l\'ajout de la technique', e);
       throw e;
     }
   }
@@ -329,7 +330,7 @@ class KaijinService {
         });
       }
     } catch (e) {
-      print('Erreur lors de la mise à jour de la technique: $e');
+      AppLogger.error('Erreur lors de la mise à jour de la technique', e);
       throw e;
     }
   }

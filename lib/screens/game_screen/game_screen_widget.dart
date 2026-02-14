@@ -100,7 +100,7 @@ class _GameScreenState extends State<GameScreen>
       builder: (context) => AlertDialog(
         title: const Text('XP Passive Accumulée'),
         content: Text(
-          'Pendant votre absence, vos Résonances ont généré ${gameState.offlineXpGained} XP!',
+          'Pendant votre absence, vos Résonances et Senseis ont généré ${gameState.offlineXpGained} XP!',
           style: const TextStyle(fontSize: 16),
         ),
         actions: [

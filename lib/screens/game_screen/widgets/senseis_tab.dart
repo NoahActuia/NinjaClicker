@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../game_state.dart';
-import '../../../styles/kai_colors.dart';
 import '../../../models/sensei.dart';
 import 'senseis_tab_components/sensei_header.dart';
 import 'senseis_tab_components/sensei_card.dart';
+import 'progression_action_runner.dart';
 
 class SenseisTab extends StatefulWidget {
   final GameState gameState;
@@ -52,74 +52,34 @@ class _SenseisTabState extends State<SenseisTab> {
 
   // Wrapper pour débloquer un sensei avec gestion d'état
   Future<void> handleUnlockSensei(Sensei sensei) async {
-    setState(() {
-      isLoading = true;
-    });
-
-    final errorCode = await widget.onUnlockSensei(sensei);
-
-    // Rafraîchir la liste des senseis
-    await widget.onRefresh();
-
-    setState(() {
-      isLoading = false;
-      // Rafraîchir la liste locale
-      currentSenseis = List<Sensei>.from(widget.senseis);
-    });
-
-    if (errorCode != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_mapErrorToMessage(errorCode)),
-          backgroundColor: KaiColors.error,
-        ),
-      );
-    }
+    await runProgressionAction<Sensei>(
+      context: context,
+      action: widget.onUnlockSensei,
+      refresh: () async => widget.onRefresh(),
+      onLoadingStart: () => setState(() => isLoading = true),
+      onLoadingEnd: () => setState(() => isLoading = false),
+      syncLocalState: () => setState(() {
+        currentSenseis = List<Sensei>.from(widget.senseis);
+      }),
+      entity: sensei,
+      entityLabel: 'Sensei',
+    );
   }
 
   // Wrapper pour améliorer un sensei avec gestion d'état
   Future<void> handleUpgradeSensei(Sensei sensei) async {
-    setState(() {
-      isLoading = true;
-    });
-
-    final errorCode = await widget.onUpgradeSensei(sensei);
-
-    // Rafraîchir la liste des senseis
-    await widget.onRefresh();
-
-    setState(() {
-      isLoading = false;
-      // Rafraîchir la liste locale
-      currentSenseis = List<Sensei>.from(widget.senseis);
-    });
-
-    if (errorCode != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_mapErrorToMessage(errorCode)),
-          backgroundColor: KaiColors.error,
-        ),
-      );
-    }
-  }
-
-  String _mapErrorToMessage(String code) {
-    switch (code) {
-      case 'ERR_NOT_ENOUGH_XP':
-        return 'XP insuffisante pour cette action.';
-      case 'ERR_KAIJIN_NOT_FOUND':
-        return 'Kaijin introuvable. Recharge la session.';
-      case 'ERR_NOT_UNLOCKED':
-        return 'Sensei non débloqué.';
-      case 'ERR_MAX_LEVEL_REACHED':
-        return 'Niveau maximum déjà atteint.';
-      case 'ERR_INVALID_UNLOCK_COST':
-      case 'ERR_INVALID_UPGRADE_COST':
-        return 'Coût invalide détecté. Réessaie après synchronisation.';
-      default:
-        return 'Action impossible pour le moment.';
-    }
+    await runProgressionAction<Sensei>(
+      context: context,
+      action: widget.onUpgradeSensei,
+      refresh: () async => widget.onRefresh(),
+      onLoadingStart: () => setState(() => isLoading = true),
+      onLoadingEnd: () => setState(() => isLoading = false),
+      syncLocalState: () => setState(() {
+        currentSenseis = List<Sensei>.from(widget.senseis);
+      }),
+      entity: sensei,
+      entityLabel: 'Sensei',
+    );
   }
 
   @override

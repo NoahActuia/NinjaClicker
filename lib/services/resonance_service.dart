@@ -3,6 +3,7 @@ import '../models/resonance.dart';
 import '../models/kaijin.dart';
 import 'audio_service.dart';
 import 'app_logger.dart';
+import 'progression_link_service.dart';
 
 class ResonanceService {
   // Singleton pattern
@@ -74,74 +75,51 @@ class ResonanceService {
   // Débloquer une Résonance avec gestion d'XP
   Future<String?> unlockResonanceWithXp(Kaijin kaijin, Resonance resonance,
       int totalXP, Function(int) updateXP) async {
-    if (resonance.xpCostToUnlock <= 0) {
+    final result = await ProgressionLinkService.unlockWithXp(
+      totalXP: totalXP,
+      unlockCost: resonance.xpCostToUnlock,
+      updateXP: updateXP,
+      unlockAction: () => unlockResonance(kaijin.id, resonance),
+      playSound: _audioService.playSound,
+    );
+
+    if (result == 'ERR_INVALID_UNLOCK_COST') {
       AppLogger.warning('Coût de déblocage invalide pour la résonance ${resonance.id}');
-      return 'ERR_INVALID_UNLOCK_COST';
+    } else if (result == 'ERR_UNLOCK_EXCEPTION') {
+      AppLogger.error('Erreur lors du déblocage de la résonance');
     }
-    if (totalXP < resonance.xpCostToUnlock) return 'ERR_NOT_ENOUGH_XP';
 
-    updateXP(-resonance.xpCostToUnlock);
-
-    try {
-      final success = await unlockResonance(kaijin.id, resonance);
-
-      if (success) {
-        _audioService.playSound('unlock.mp3');
-        return null;
-      } else {
-        // En cas d'échec, rembourser l'XP dépensé
-        updateXP(resonance.xpCostToUnlock);
-        return 'ERR_UNLOCK_FAILED';
-      }
-    } catch (e) {
-      AppLogger.error('Erreur lors du déblocage de la résonance', e);
-      // Rembourser l'XP en cas d'erreur
-      updateXP(resonance.xpCostToUnlock);
-      return 'ERR_UNLOCK_EXCEPTION';
-    }
+    return result;
   }
 
   // Améliorer une Résonance avec gestion d'XP
   Future<String?> upgradeResonanceWithXp(Kaijin kaijin, Resonance resonance,
       int totalXP, Function(int) updateXP) async {
-    if (!resonance.isUnlocked) return 'ERR_NOT_UNLOCKED';
+    final originalLevel = resonance.linkLevel;
+    final upgradeCost = resonance.getUpgradeCost();
+    final result = await ProgressionLinkService.upgradeWithXp(
+      isUnlocked: resonance.isUnlocked,
+      currentLevel: resonance.linkLevel,
+      maxLevel: resonance.maxLinkLevel,
+      totalXP: totalXP,
+      upgradeCost: upgradeCost,
+      updateXP: updateXP,
+      incrementLevel: () => resonance.linkLevel++,
+      rollbackLevel: () => resonance.linkLevel = originalLevel,
+      upgradeAction: () => upgradeResonanceLink(kaijin.id, resonance),
+      playSound: _audioService.playSound,
+    );
 
-    if (resonance.linkLevel >= resonance.maxLinkLevel) {
+    if (result == 'ERR_MAX_LEVEL_REACHED') {
       AppLogger.warning(
           'Cette résonance a déjà atteint son niveau maximum (${resonance.maxLinkLevel})');
-      return 'ERR_MAX_LEVEL_REACHED';
-    }
-
-    final upgradeCost = resonance.getUpgradeCost();
-    if (upgradeCost <= 0) {
+    } else if (result == 'ERR_INVALID_UPGRADE_COST') {
       AppLogger.warning('Coût d\'amélioration invalide pour la résonance ${resonance.id}');
-      return 'ERR_INVALID_UPGRADE_COST';
+    } else if (result == 'ERR_UPGRADE_EXCEPTION') {
+      AppLogger.error('Erreur lors de l\'amélioration de la résonance');
     }
-    if (totalXP < upgradeCost) return 'ERR_NOT_ENOUGH_XP';
 
-    updateXP(-upgradeCost);
-    int originalLevel = resonance.linkLevel;
-    resonance.linkLevel++;
-
-    try {
-      final success = await upgradeResonanceLink(kaijin.id, resonance);
-
-      if (success) {
-        _audioService.playSound('upgrade.mp3');
-        return null;
-      } else {
-        // En cas d'échec, rembourser l'XP dépensé et restaurer le niveau
-        updateXP(upgradeCost);
-        resonance.linkLevel = originalLevel;
-        return 'ERR_UPGRADE_FAILED';
-      }
-    } catch (e) {
-      AppLogger.error('Erreur lors de l\'amélioration de la résonance', e);
-      // Rembourser l'XP et restaurer le niveau en cas d'erreur
-      updateXP(upgradeCost);
-      resonance.linkLevel = originalLevel;
-      return 'ERR_UPGRADE_EXCEPTION';
-    }
+    return result;
   }
 
   // Débloquer une nouvelle Résonance pour un ninja

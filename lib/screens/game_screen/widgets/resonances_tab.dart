@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../game_state.dart';
-import '../../../styles/kai_colors.dart';
 import '../../../models/resonance.dart';
 import 'resonances_tab_components/resonance_header.dart';
 import 'resonances_tab_components/resonance_card.dart';
+import 'progression_action_runner.dart';
 
 class ResonancesTab extends StatefulWidget {
   final GameState gameState;
@@ -52,74 +52,34 @@ class _ResonancesTabState extends State<ResonancesTab> {
 
   // Wrapper pour débloquer une résonance avec gestion d'état
   Future<void> handleUnlockResonance(Resonance resonance) async {
-    setState(() {
-      isLoading = true;
-    });
-
-    final errorCode = await widget.onUnlockResonance(resonance);
-
-    // Rafraîchir la liste des résonances
-    await widget.onRefresh();
-
-    setState(() {
-      isLoading = false;
-      // Rafraîchir la liste locale
-      currentResonances = List<Resonance>.from(widget.resonances);
-    });
-
-    if (errorCode != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_mapErrorToMessage(errorCode)),
-          backgroundColor: KaiColors.error,
-        ),
-      );
-    }
+    await runProgressionAction<Resonance>(
+      context: context,
+      action: widget.onUnlockResonance,
+      refresh: () async => widget.onRefresh(),
+      onLoadingStart: () => setState(() => isLoading = true),
+      onLoadingEnd: () => setState(() => isLoading = false),
+      syncLocalState: () => setState(() {
+        currentResonances = List<Resonance>.from(widget.resonances);
+      }),
+      entity: resonance,
+      entityLabel: 'Résonance',
+    );
   }
 
   // Wrapper pour améliorer une résonance avec gestion d'état
   Future<void> handleUpgradeResonance(Resonance resonance) async {
-    setState(() {
-      isLoading = true;
-    });
-
-    final errorCode = await widget.onUpgradeResonance(resonance);
-
-    // Rafraîchir la liste des résonances
-    await widget.onRefresh();
-
-    setState(() {
-      isLoading = false;
-      // Rafraîchir la liste locale
-      currentResonances = List<Resonance>.from(widget.resonances);
-    });
-
-    if (errorCode != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_mapErrorToMessage(errorCode)),
-          backgroundColor: KaiColors.error,
-        ),
-      );
-    }
-  }
-
-  String _mapErrorToMessage(String code) {
-    switch (code) {
-      case 'ERR_NOT_ENOUGH_XP':
-        return 'XP insuffisante pour cette action.';
-      case 'ERR_KAIJIN_NOT_FOUND':
-        return 'Kaijin introuvable. Recharge la session.';
-      case 'ERR_NOT_UNLOCKED':
-        return 'Résonance non débloquée.';
-      case 'ERR_MAX_LEVEL_REACHED':
-        return 'Niveau maximum déjà atteint.';
-      case 'ERR_INVALID_UNLOCK_COST':
-      case 'ERR_INVALID_UPGRADE_COST':
-        return 'Coût invalide détecté. Réessaie après synchronisation.';
-      default:
-        return 'Action impossible pour le moment.';
-    }
+    await runProgressionAction<Resonance>(
+      context: context,
+      action: widget.onUpgradeResonance,
+      refresh: () async => widget.onRefresh(),
+      onLoadingStart: () => setState(() => isLoading = true),
+      onLoadingEnd: () => setState(() => isLoading = false),
+      syncLocalState: () => setState(() {
+        currentResonances = List<Resonance>.from(widget.resonances);
+      }),
+      entity: resonance,
+      entityLabel: 'Résonance',
+    );
   }
 
   @override

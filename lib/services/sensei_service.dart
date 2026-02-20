@@ -3,6 +3,7 @@ import '../models/sensei.dart';
 import '../models/kaijin.dart';
 import 'audio_service.dart';
 import 'app_logger.dart';
+import 'progression_link_service.dart';
 
 class SenseiService {
   // Singleton pattern
@@ -74,74 +75,51 @@ class SenseiService {
   // Débloquer un Sensei avec gestion d'XP
   Future<String?> unlockSenseiWithXp(
       Kaijin kaijin, Sensei sensei, int totalXP, Function(int) updateXP) async {
-    if (sensei.xpCostToUnlock <= 0) {
+    final result = await ProgressionLinkService.unlockWithXp(
+      totalXP: totalXP,
+      unlockCost: sensei.xpCostToUnlock,
+      updateXP: updateXP,
+      unlockAction: () => unlockSensei(kaijin.id, sensei),
+      playSound: _audioService.playSound,
+    );
+
+    if (result == 'ERR_INVALID_UNLOCK_COST') {
       AppLogger.warning('Coût de déblocage invalide pour le sensei ${sensei.id}');
-      return 'ERR_INVALID_UNLOCK_COST';
+    } else if (result == 'ERR_UNLOCK_EXCEPTION') {
+      AppLogger.error('Erreur lors du déblocage du sensei');
     }
-    if (totalXP < sensei.xpCostToUnlock) return 'ERR_NOT_ENOUGH_XP';
 
-    updateXP(-sensei.xpCostToUnlock);
-
-    try {
-      final success = await unlockSensei(kaijin.id, sensei);
-
-      if (success) {
-        _audioService.playSound('unlock.mp3');
-        return null;
-      } else {
-        // En cas d'échec, rembourser l'XP dépensé
-        updateXP(sensei.xpCostToUnlock);
-        return 'ERR_UNLOCK_FAILED';
-      }
-    } catch (e) {
-      AppLogger.error('Erreur lors du déblocage du sensei', e);
-      // Rembourser l'XP en cas d'erreur
-      updateXP(sensei.xpCostToUnlock);
-      return 'ERR_UNLOCK_EXCEPTION';
-    }
+    return result;
   }
 
   // Améliorer un Sensei avec gestion d'XP
   Future<String?> upgradeSenseiWithXp(
       Kaijin kaijin, Sensei sensei, int totalXP, Function(int) updateXP) async {
-    if (!sensei.isUnlocked) return 'ERR_NOT_UNLOCKED';
+    final originalLevel = sensei.linkLevel;
+    final upgradeCost = sensei.getUpgradeCost();
+    final result = await ProgressionLinkService.upgradeWithXp(
+      isUnlocked: sensei.isUnlocked,
+      currentLevel: sensei.linkLevel,
+      maxLevel: sensei.maxLinkLevel,
+      totalXP: totalXP,
+      upgradeCost: upgradeCost,
+      updateXP: updateXP,
+      incrementLevel: () => sensei.linkLevel++,
+      rollbackLevel: () => sensei.linkLevel = originalLevel,
+      upgradeAction: () => upgradeSenseiLink(kaijin.id, sensei),
+      playSound: _audioService.playSound,
+    );
 
-    if (sensei.linkLevel >= sensei.maxLinkLevel) {
+    if (result == 'ERR_MAX_LEVEL_REACHED') {
       AppLogger.warning(
           'Ce sensei a déjà atteint son niveau maximum (${sensei.maxLinkLevel})');
-      return 'ERR_MAX_LEVEL_REACHED';
-    }
-
-    final upgradeCost = sensei.getUpgradeCost();
-    if (upgradeCost <= 0) {
+    } else if (result == 'ERR_INVALID_UPGRADE_COST') {
       AppLogger.warning('Coût d\'amélioration invalide pour le sensei ${sensei.id}');
-      return 'ERR_INVALID_UPGRADE_COST';
+    } else if (result == 'ERR_UPGRADE_EXCEPTION') {
+      AppLogger.error('Erreur lors de l\'amélioration du sensei');
     }
-    if (totalXP < upgradeCost) return 'ERR_NOT_ENOUGH_XP';
 
-    updateXP(-upgradeCost);
-    int originalLevel = sensei.linkLevel;
-    sensei.linkLevel++;
-
-    try {
-      final success = await upgradeSenseiLink(kaijin.id, sensei);
-
-      if (success) {
-        _audioService.playSound('upgrade.mp3');
-        return null;
-      } else {
-        // En cas d'échec, rembourser l'XP dépensé et restaurer le niveau
-        updateXP(upgradeCost);
-        sensei.linkLevel = originalLevel;
-        return 'ERR_UPGRADE_FAILED';
-      }
-    } catch (e) {
-      AppLogger.error('Erreur lors de l\'amélioration du sensei', e);
-      // Rembourser l'XP et restaurer le niveau en cas d'erreur
-      updateXP(upgradeCost);
-      sensei.linkLevel = originalLevel;
-      return 'ERR_UPGRADE_EXCEPTION';
-    }
+    return result;
   }
 
   // Débloquer un nouveau Sensei pour un kaijin

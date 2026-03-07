@@ -122,7 +122,7 @@ class ResonanceService {
     return result;
   }
 
-  // Débloquer une nouvelle Résonance pour un ninja
+  // Débloquer une nouvelle Résonance pour un kaijin
   Future<bool> unlockResonance(String kaijinId, Resonance resonance) async {
     try {
       // Vérifier si la relation existe déjà

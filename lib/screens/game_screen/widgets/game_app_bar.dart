@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../game_state.dart';
-import '../../welcome_screen.dart';
 import '../../../styles/kai_colors.dart';
 import 'app_bar_components/app_bar_background.dart';
 import 'app_bar_components/player_profile_widget.dart';
@@ -8,7 +7,7 @@ import 'app_bar_components/power_indicator_widget.dart';
 import 'app_bar_components/app_menu_widget.dart';
 import 'app_bar_components/quit_button_widget.dart';
 import 'app_bar_components/kai_tabs_widget.dart';
-import '../../online_combat_screen.dart';
+import '../../../navigation/app_routes.dart';
 
 class GameAppBar extends StatelessWidget implements PreferredSizeWidget {
   final GameState gameState;
@@ -88,12 +87,7 @@ class GameAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   // Méthode pour ouvrir l'écran de combat en ligne
   void _openOnlineCombatScreen(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const OnlineCombatScreen(),
-      ),
-    ).then((_) {
+    Navigator.pushNamed(context, AppRoutes.onlineCombat).then((_) {
       // Rafraîchir les données après le retour de l'écran de combat en ligne
       gameState.saveGame(updateConnections: true);
     });
@@ -124,12 +118,7 @@ class GameAppBar extends StatelessWidget implements PreferredSizeWidget {
                 await gameState.saveGame(updateConnections: true);
 
                 if (context.mounted) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const WelcomeScreen(),
-                    ),
-                  );
+                  Navigator.pushReplacementNamed(context, AppRoutes.welcome);
                 }
               },
               style: ElevatedButton.styleFrom(

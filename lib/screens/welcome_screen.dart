@@ -1,21 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:convert';
 import 'dart:math';
 // Import conditionnel pour le web
 // ignore: unused_import
 import 'welcome_screen_web.dart'
     if (dart.library.io) 'welcome_screen_stub.dart';
-import '../models/saved_game.dart';
-import '../services/save_service.dart';
-import 'game_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'firebase_test_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/kaijin_service.dart';
 import '../models/kaijin.dart';
-import 'intro_video_screen.dart';
 import '../styles/kai_colors.dart' as styles;
+import '../navigation/app_routes.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -127,20 +120,17 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     if (user != null) {
       try {
         // Créer un nouveau kaijin dans Firebase
-        final kaijin = await _kaijinService.createKaijin(
+        await _kaijinService.createKaijin(
           userId: user.uid,
           name: playerName,
         );
 
         // Démarrer la vidéo d'introduction puis le jeu avec ce kaijin
         if (mounted) {
-          Navigator.pushReplacement(
+          Navigator.pushReplacementNamed(
             context,
-            MaterialPageRoute(
-              builder: (context) => IntroVideoScreen(
-                playerName: playerName,
-              ),
-            ),
+            AppRoutes.introVideo,
+            arguments: {'playerName': playerName},
           );
         }
       } catch (e) {
@@ -179,17 +169,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
       // Naviguer vers l'écran de jeu
       if (mounted) {
-        Navigator.pushReplacement(
+        Navigator.pushReplacementNamed(
           context,
-          MaterialPageRoute(
-            builder: (context) => GameScreen(
-              playerName: kaijin.name,
-              savedGame:
-                  null, // Le kaijin sera chargé directement dans GameScreen
-              resetState:
-                  true, // Indiquer qu'il faut réinitialiser l'état du jeu quand on change de kaijin
-            ),
-          ),
+          AppRoutes.game,
+          arguments: {
+            'playerName': kaijin.name,
+            'resetState': true,
+          },
         );
       }
     } catch (e) {
@@ -197,15 +183,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
       // En cas d'erreur, continuer quand même vers l'écran de jeu
       if (mounted) {
-        Navigator.pushReplacement(
+        Navigator.pushReplacementNamed(
           context,
-          MaterialPageRoute(
-            builder: (context) => GameScreen(
-              playerName: kaijin.name,
-              savedGame: null,
-              resetState: true,
-            ),
-          ),
+          AppRoutes.game,
+          arguments: {
+            'playerName': kaijin.name,
+            'resetState': true,
+          },
         );
       }
     }
@@ -401,7 +385,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       onPressed: () async {
                         await FirebaseAuth.instance.signOut();
                         if (mounted) {
-                          Navigator.pushReplacementNamed(context, '/auth');
+                          Navigator.pushReplacementNamed(context, AppRoutes.auth);
                         }
                       },
                       child: const Text(
@@ -551,67 +535,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           await _loadKaijinAndStartGame(kaijin);
         },
       ),
-    );
-  }
-
-  // Affichage de la boîte de dialogue de création de kaijin
-  void _showCreateKaijinDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(
-            'Créer un nouveau personnage',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: styles.KaiColors.background,
-            ),
-          ),
-          content: TextField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              labelText: 'Nom du personnage',
-              focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(
-                  color: styles.KaiColors.background,
-                  width: 2.0,
-                ),
-              ),
-            ),
-            maxLength: 20,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _nameController.clear();
-              },
-              child: const Text(
-                'Annuler',
-                style: TextStyle(color: Colors.grey),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                String name = _nameController.text.trim();
-                if (name.isNotEmpty) {
-                  Navigator.pop(context);
-                  _createKaijinAndStartGame(name);
-                  _nameController.clear();
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: styles.KaiColors.background,
-              ),
-              child: const Text(
-                'Créer',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 

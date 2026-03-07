@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:audioplayers/audioplayers.dart';
+import '../../l10n/app_strings.dart';
 import '../../models/technique.dart';
 import '../../models/kaijin_technique.dart';
 import '../../services/app_logger.dart';
@@ -446,18 +447,18 @@ class TechniqueTreeState {
   String _mapTechniqueErrorToMessage(Object error) {
     final raw = error.toString();
     if (raw.contains('ERR_NOT_ENOUGH_XP')) {
-      return 'XP insuffisante pour cette action.';
+      return AppStrings.xpInsufficient;
     }
     if (raw.contains('ERR_KAIJIN_NOT_FOUND')) {
-      return 'Kaijin introuvable. Recharge la session.';
+      return AppStrings.kaijinNotFound;
     }
     if (raw.contains('ERR_TECHNIQUE_NOT_UNLOCKED')) {
-      return 'Technique non débloquée pour ce personnage.';
+      return AppStrings.techniqueNotUnlocked;
     }
     if (raw.contains('ERR_INVALID_UNLOCK_COST') ||
         raw.contains('ERR_INVALID_UPGRADE_COST')) {
-      return 'Coût invalide détecté. Réessaie après synchronisation.';
+      return AppStrings.invalidCostDetected;
     }
-    return 'Une erreur est survenue pendant l\'opération.';
+    return AppStrings.genericTechniqueError;
   }
 }

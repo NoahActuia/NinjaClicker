@@ -7,11 +7,13 @@ import 'screens/auth_screen.dart';
 import 'screens/auth_wrapper.dart';
 import 'screens/technique_tree_screen.dart';
 import 'screens/online_combat_screen.dart';
+import 'screens/intro_video_screen.dart' show IntroVideoScreen;
+import 'screens/game_screen.dart';
+import 'navigation/app_routes.dart';
 import 'services/database_initializer.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart';
 import 'styles/kai_colors.dart';
 import 'services/resonance_service.dart';
 
@@ -80,17 +82,39 @@ class MyApp extends StatelessWidget {
         ),
       ),
       initialRoute: '/',
+      onGenerateRoute: (settings) {
+        if (settings.name == AppRoutes.introVideo) {
+          final args = settings.arguments as Map<String, dynamic>? ?? {};
+          final playerName = args['playerName'] as String? ?? 'Fracturé';
+          return MaterialPageRoute(
+            builder: (_) => IntroVideoScreen(playerName: playerName),
+          );
+        }
+        if (settings.name == AppRoutes.game) {
+          final args = settings.arguments as Map<String, dynamic>? ?? {};
+          final playerName = args['playerName'] as String? ?? 'Fracturé';
+          final resetState = args['resetState'] as bool? ?? false;
+          return MaterialPageRoute(
+            builder: (_) => GameScreen(
+              playerName: playerName,
+              savedGame: null,
+              resetState: resetState,
+            ),
+          );
+        }
+        return null;
+      },
       routes: {
-        '/':
+        AppRoutes.root:
             (context) =>
                 firebaseInitialized
                     ? const AuthWrapper()
                     : FirebaseErrorScreen(error: firebaseError),
-        '/auth': (context) => const AuthScreen(),
-        '/welcome': (context) => const WelcomeScreen(),
-        '/firebase_test': (context) => const FirebaseTestScreen(),
-        '/technique_tree': (context) => const TechniqueTreeScreen(),
-        '/online_combat': (context) => const OnlineCombatScreen(),
+        AppRoutes.auth: (context) => const AuthScreen(),
+        AppRoutes.welcome: (context) => const WelcomeScreen(),
+        AppRoutes.firebaseTest: (context) => const FirebaseTestScreen(),
+        AppRoutes.techniqueTree: (context) => const TechniqueTreeScreen(),
+        AppRoutes.onlineCombat: (context) => const OnlineCombatScreen(),
       },
     );
   }
@@ -132,12 +156,7 @@ class FirebaseErrorScreen extends StatelessWidget {
               const SizedBox(height: 30),
               ElevatedButton(
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const FirebaseTestScreen(),
-                    ),
-                  );
+                  Navigator.pushNamed(context, AppRoutes.firebaseTest);
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red[800],

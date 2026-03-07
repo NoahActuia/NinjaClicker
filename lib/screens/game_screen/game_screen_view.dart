@@ -1,15 +1,8 @@
 import 'package:flutter/material.dart';
 import 'game_state.dart';
+import '../../l10n/app_strings.dart';
 import '../../styles/kai_colors.dart';
 import '../../widgets/kai_button.dart';
-import '../../widgets/settings_dialog.dart';
-import 'game_dialogs.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../story/story_screen.dart';
-import '../ranking_screen.dart';
-import '../technique_tree_screen.dart';
-import '../combat_techniques_screen.dart';
-import '../welcome_screen.dart';
 import 'widgets/game_app_bar.dart';
 import 'widgets/senseis_tab.dart';
 import 'widgets/resonances_tab.dart';
@@ -191,7 +184,7 @@ class PassiveXpIndicator extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               const Text(
-                'Génération passive: ',
+                AppStrings.passiveGenerationLabel,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
@@ -217,7 +210,7 @@ class PassiveXpIndicator extends StatelessWidget {
                   Icon(Icons.auto_fix_high, size: 12, color: Colors.grey[600]),
                   const SizedBox(width: 2),
                   Text(
-                    '$resonancesCount Résonances',
+                    '$resonancesCount ${AppStrings.resonancesLabel}',
                     style: TextStyle(
                       fontSize: 11,
                       color: Colors.grey[600],
@@ -240,7 +233,7 @@ class PassiveXpIndicator extends StatelessWidget {
                   Icon(Icons.school, size: 12, color: Colors.grey[600]),
                   const SizedBox(width: 2),
                   Text(
-                    '$senseisCount Senseis',
+                    '$senseisCount ${AppStrings.senseisLabel}',
                     style: TextStyle(
                       fontSize: 11,
                       color: Colors.grey[600],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../game_state.dart';
+import '../../../l10n/app_strings.dart';
 import '../../../styles/kai_colors.dart';
 import 'app_bar_components/app_bar_background.dart';
 import 'app_bar_components/player_profile_widget.dart';
@@ -71,7 +72,7 @@ class GameAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ],
           ),
-          tooltip: 'Mode en ligne',
+          tooltip: AppStrings.onlineModeTooltip,
           onPressed: () => _openOnlineCombatScreen(context),
         ),
 
@@ -100,15 +101,15 @@ class GameAppBar extends StatelessWidget implements PreferredSizeWidget {
       builder: (context) {
         return AlertDialog(
           title: const Text(
-            'Quitter la partie',
+            AppStrings.quitGameTitle,
             style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
           ),
-          content: const Text('Voulez-vous vraiment quitter le jeu ?'),
+          content: const Text(AppStrings.quitGamePrompt),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text(
-                'Annuler',
+                AppStrings.cancel,
                 style: TextStyle(color: Colors.grey),
               ),
             ),
@@ -125,7 +126,7 @@ class GameAppBar extends StatelessWidget implements PreferredSizeWidget {
                 backgroundColor: KaiColors.primaryDark,
               ),
               child: const Text(
-                'Quitter',
+                AppStrings.quit,
                 style: TextStyle(color: Colors.white),
               ),
             ),

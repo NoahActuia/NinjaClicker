@@ -7,6 +7,7 @@ import 'welcome_screen_web.dart'
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/kaijin_service.dart';
 import '../models/kaijin.dart';
+import '../l10n/app_strings.dart';
 import '../styles/kai_colors.dart' as styles;
 import '../navigation/app_routes.dart';
 
@@ -72,7 +73,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       builder: (context) {
         return AlertDialog(
           title: Text(
-            'Nouvelle Partie',
+            AppStrings.newGameTitle,
             style: TextStyle(
               color: styles.KaiColors.background,
               fontWeight: FontWeight.bold,
@@ -80,16 +81,16 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           ),
           content: TextField(
             controller: _nameController,
-            decoration: const InputDecoration(
-              labelText: 'Entrez votre nom de Kaijin',
+            decoration: InputDecoration(
+              labelText: AppStrings.kaijinNameInputLabel,
               border: OutlineInputBorder(),
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Annuler',
+              child: Text(
+                AppStrings.cancel,
                 style: TextStyle(color: Colors.grey),
               ),
             ),
@@ -103,8 +104,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: styles.KaiColors.background,
               ),
-              child: const Text(
-                'Commencer',
+              child: Text(
+                AppStrings.start,
                 style: TextStyle(color: Colors.white),
               ),
             ),
@@ -145,7 +146,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Vous devez être connecté pour créer un kaijin"),
+          content: Text(AppStrings.mustBeConnectedToCreateKaijin),
           backgroundColor: Colors.red,
         ),
       );
@@ -416,7 +417,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Text(
-              'Aucun personnage disponible',
+              AppStrings.noCharacterAvailable,
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
@@ -428,7 +429,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: styles.KaiColors.background,
               ),
-              child: const Text('Créer un personnage'),
+              child: const Text(AppStrings.createCharacter),
             ),
           ],
         ),

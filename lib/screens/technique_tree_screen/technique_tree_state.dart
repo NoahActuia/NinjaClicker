@@ -78,14 +78,14 @@ class TechniqueTreeState {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        throw Exception('Utilisateur non authentifié');
+        throw Exception(AppStrings.unauthorizedUser);
       }
 
       // Utiliser la nouvelle méthode getCurrentKaijin du service
       final currentKaijin = await _kaijinService.getCurrentKaijin(user.uid);
 
       if (currentKaijin == null) {
-        throw Exception('Aucun personnage trouvé pour l\'utilisateur');
+        throw Exception(AppStrings.noCharacterFoundForUser);
       }
 
       AppLogger.info(
@@ -100,7 +100,7 @@ class TechniqueTreeState {
       AppLogger.error('Erreur lors de la récupération du kaijin', e);
       setState(() {
         _kaijinId = '';
-        _kaijinName = 'Fracturé inconnu';
+        _kaijinName = AppStrings.unknownFractured;
         _playerXp = 0;
       });
     }
@@ -327,7 +327,7 @@ class TechniqueTreeState {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Technique débloquée: ${technique.name}'),
+          content: Text('${AppStrings.techniqueUnlocked}: ${technique.name}'),
           backgroundColor: KaiColors.success,
         ),
       );
@@ -418,7 +418,7 @@ class TechniqueTreeState {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'Technique améliorée: ${technique.name} (Niveau ${newLevel})'),
+              '${AppStrings.techniqueUpgradeSuccess}: ${technique.name} (Niveau ${newLevel})'),
           backgroundColor: KaiColors.success,
           duration: Duration(seconds: 2),
         ),

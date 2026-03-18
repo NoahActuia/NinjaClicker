@@ -1,6 +1,6 @@
 # Resume des modifications IA
 
-Ce document resume les modifications implementees pendant les sprints 0, 1 et 2.
+Ce document resume les modifications implementees pendant les sprints 0, 1, 2 et 3.
 
 ## Commits realises
 
@@ -8,6 +8,8 @@ Ce document resume les modifications implementees pendant les sprints 0, 1 et 2.
 - `77d2d2b` - fiabilise les flows progression et erreurs utilisateur
 - `ae8a23e` - factorise la progression sensei/resonance
 - `7ddb079` - ajoute des tests unitaires sur la progression factorisee
+- `b712b65` - uniformise routes et centralise les textes de base
+- `eab253d` - etend la centralisation i18n sur les ecrans cles
 
 ## Sprint 0 - Corrections critiques gameplay/data
 
@@ -106,6 +108,36 @@ Ce document resume les modifications implementees pendant les sprints 0, 1 et 2.
   - `senseis_tab.dart`
   - `resonances_tab.dart`
 
+## Sprint 3 - Navigation + base i18n
+
+### 1) Uniformisation navigation
+
+- `lib/navigation/app_routes.dart` (nouveau)
+  - registre central de routes nommees
+- `lib/main.dart`
+  - routes principales branchees sur `AppRoutes`
+  - `onGenerateRoute` ajoute pour routes avec arguments (`intro_video`, `game`)
+- `lib/screens/welcome_screen.dart`
+  - remplace plusieurs `MaterialPageRoute` par `pushReplacementNamed`
+- `lib/screens/game_screen/widgets/game_app_bar.dart`
+  - navigation vers online combat et retour menu via routes nommees
+
+### 2) Centralisation de textes (base i18n)
+
+- `lib/l10n/app_strings.dart` (nouveau)
+  - centralise les labels gameplay et messages d'erreur principaux
+- integration dans:
+  - `game_screen_view.dart` (labels passifs/references sensei-resonance)
+  - `progression_error_messages.dart`
+  - `technique_tree_state.dart`
+  - `welcome_screen.dart`
+  - `game_app_bar.dart`
+
+### 3) Nettoyage lie au sprint 3
+
+- suppression d'imports inutilises sur plusieurs ecrans touches
+- suppression d'un bloc de dialogue non utilise dans `welcome_screen.dart`
+
 ## Tests ajoutes
 
 - `test/services/progression_link_service_test.dart` (nouveau)
@@ -128,3 +160,5 @@ Ce document resume les modifications implementees pendant les sprints 0, 1 et 2.
 - meilleur diagnostic grace au logger structure
 - meilleure UX avec erreurs explicites plutot que generiques
 - base de tests unitaire pour eviter les regressions sur le moteur de progression
+- navigation plus coherente et previsible sur les flux coeur
+- base i18n prete a etre etendue ecran par ecran

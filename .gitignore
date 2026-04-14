@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local AI session summary (keep local, do not track)
+AI_CHANGES_SUMMARY.md

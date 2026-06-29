@@ -6,6 +6,7 @@ class User {
   final String email;
   final DateTime createdAt;
   final DateTime? lastLogin;
+  final bool mfaEnabled;
 
   User({
     required this.id,
@@ -13,6 +14,7 @@ class User {
     required this.email,
     required this.createdAt,
     this.lastLogin,
+    this.mfaEnabled = false,
   });
 
   // Depuis Firestore
@@ -26,6 +28,7 @@ class User {
       lastLogin: data['lastLogin'] != null
           ? (data['lastLogin'] as Timestamp).toDate()
           : null,
+      mfaEnabled: data['mfaEnabled'] as bool? ?? false,
     );
   }
 
@@ -36,6 +39,7 @@ class User {
       'email': email,
       'createdAt': Timestamp.fromDate(createdAt),
       'lastLogin': lastLogin != null ? Timestamp.fromDate(lastLogin!) : null,
+      'mfaEnabled': mfaEnabled,
     };
   }
 }

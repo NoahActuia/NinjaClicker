@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -9,10 +10,13 @@ import 'screens/technique_tree_screen.dart';
 import 'screens/online_combat_screen.dart';
 import 'screens/intro_video_screen.dart' show IntroVideoScreen;
 import 'screens/game_screen.dart';
+import 'screens/forgot_password_screen.dart';
+import 'screens/email_verification_screen.dart';
+import 'screens/security_settings_screen.dart';
 import 'navigation/app_routes.dart';
 import 'services/database_initializer.dart';
+import 'utils/security_config.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'styles/kai_colors.dart';
 import 'services/resonance_service.dart';
@@ -33,11 +37,15 @@ void main() async {
     print("Erreur lors de l'initialisation: $e");
   }
   final dbInitializer = DatabaseInitializer();
-  await dbInitializer.initializeDatabase();
+  if (SecurityConfig.allowClientDatabaseSeeding) {
+    await dbInitializer.initializeDatabase();
+  }
 
-  // Initialiser les résonances par défaut
-  final resonanceService = ResonanceService();
-  await resonanceService.initDefaultResonances();
+  // Initialiser les résonances par défaut (uniquement en debug)
+  if (SecurityConfig.allowClientDatabaseSeeding) {
+    final resonanceService = ResonanceService();
+    await resonanceService.initDefaultResonances();
+  }
 
   runApp(const MyApp(firebaseInitialized: true, firebaseError: ''));
 }
@@ -112,9 +120,13 @@ class MyApp extends StatelessWidget {
                     : FirebaseErrorScreen(error: firebaseError),
         AppRoutes.auth: (context) => const AuthScreen(),
         AppRoutes.welcome: (context) => const WelcomeScreen(),
-        AppRoutes.firebaseTest: (context) => const FirebaseTestScreen(),
+        if (kDebugMode)
+          AppRoutes.firebaseTest: (context) => const FirebaseTestScreen(),
         AppRoutes.techniqueTree: (context) => const TechniqueTreeScreen(),
         AppRoutes.onlineCombat: (context) => const OnlineCombatScreen(),
+        AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
+        AppRoutes.emailVerification: (context) => const EmailVerificationScreen(),
+        AppRoutes.securitySettings: (context) => const SecuritySettingsScreen(),
       },
     );
   }
@@ -155,9 +167,9 @@ class FirebaseErrorScreen extends StatelessWidget {
               ),
               const SizedBox(height: 30),
               ElevatedButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, AppRoutes.firebaseTest);
-                },
+                onPressed: kDebugMode
+                    ? () => Navigator.pushNamed(context, AppRoutes.firebaseTest)
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red[800],
                   foregroundColor: Colors.white,

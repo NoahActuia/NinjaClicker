@@ -378,6 +378,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   ),
                 ),
 
+                // Bouton sécurité du compte
+                TextButton.icon(
+                  onPressed: () => Navigator.pushNamed(
+                    context,
+                    AppRoutes.securitySettings,
+                  ),
+                  icon: const Icon(Icons.security, color: Colors.white70),
+                  label: const Text(
+                    'Sécurité du compte',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+
                 // Bouton de déconnexion
                 if (_playerKaijins.isNotEmpty)
                   Padding(

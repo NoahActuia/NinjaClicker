@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
+import '../utils/security_config.dart';
+import '../utils/auth_error_mapper.dart';
 import '../styles/kai_colors.dart';
+import 'totp_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({Key? key}) : super(key: key);
@@ -17,9 +19,18 @@ class _AuthScreenState extends State<AuthScreen> {
   final _usernameController = TextEditingController();
   bool _isLogin = true;
   bool _isLoading = false;
+  bool _obscurePassword = true;
   String _errorMessage = '';
 
   final AuthService _authService = AuthService();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,8 +67,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     const SizedBox(height: 30),
 
-                    // Champs du formulaire
-                    if (!_isLogin) // Username uniquement pour inscription
+                    if (!_isLogin)
                       TextFormField(
                         controller: _usernameController,
                         decoration: InputDecoration(
@@ -65,49 +75,61 @@ class _AuthScreenState extends State<AuthScreen> {
                           filled: true,
                           fillColor: Colors.white.withOpacity(0.8),
                         ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Veuillez entrer un pseudo';
-                          }
-                          return null;
-                        },
+                        validator: SecurityConfig.validateUsername,
                       ),
-                    const SizedBox(height: 16),
+                    if (!_isLogin) const SizedBox(height: 16),
 
                     TextFormField(
                       controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
                         labelText: 'Email',
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.8),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Veuillez entrer un email';
-                        }
-                        return null;
-                      },
+                      validator: SecurityConfig.validateEmail,
                     ),
                     const SizedBox(height: 16),
 
                     TextFormField(
                       controller: _passwordController,
-                      obscureText: true,
+                      obscureText: _obscurePassword,
                       decoration: InputDecoration(
                         labelText: 'Mot de passe',
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.8),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                          ),
+                          onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
+                        ),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Veuillez entrer un mot de passe';
-                        }
-                        if (!_isLogin && value.length < 6) {
-                          return 'Le mot de passe doit contenir au moins 6 caractères';
-                        }
-                        return null;
-                      },
+                      validator: _isLogin
+                          ? (v) => v == null || v.isEmpty
+                              ? 'Mot de passe requis'
+                              : null
+                          : SecurityConfig.validatePassword,
                     ),
+
+                    if (_isLogin)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => Navigator.pushNamed(
+                            context,
+                            '/forgot_password',
+                          ),
+                          child: const Text(
+                            'Mot de passe oublié ?',
+                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                        ),
+                      ),
 
                     if (_errorMessage.isNotEmpty)
                       Padding(
@@ -115,6 +137,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         child: Text(
                           _errorMessage,
                           style: const TextStyle(color: Colors.red),
+                          textAlign: TextAlign.center,
                         ),
                       ),
 
@@ -127,7 +150,9 @@ class _AuthScreenState extends State<AuthScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: KaiColors.primaryDark,
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 50, vertical: 12),
+                                horizontal: 50,
+                                vertical: 12,
+                              ),
                             ),
                             child: Text(
                               _isLogin ? 'CONNEXION' : 'INSCRIPTION',
@@ -162,56 +187,53 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _handleSubmit() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = '';
-      });
+    if (!_formKey.currentState!.validate()) return;
 
-      try {
-        if (_isLogin) {
-          // Connexion
-          final user = await _authService.login(
-            email: _emailController.text,
-            password: _passwordController.text,
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      if (_isLogin) {
+        final result = await _authService.login(
+          email: _emailController.text,
+          password: _passwordController.text,
+        );
+
+        if (!mounted) return;
+
+        if (result.requiresMfa && result.mfaResolver != null) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TotpVerifyScreen(resolver: result.mfaResolver!),
+            ),
           );
-
-          if (user != null && mounted) {
+        } else if (result.user != null) {
+          if (_authService.isEmailVerified) {
             Navigator.pushReplacementNamed(context, '/welcome');
-          } else if (mounted) {
-            setState(() {
-              _errorMessage = 'Erreur de connexion';
-            });
-          }
-        } else {
-          // Inscription
-          final user = await _authService.register(
-            username: _usernameController.text,
-            email: _emailController.text,
-            password: _passwordController.text,
-          );
-
-          if (user != null && mounted) {
-            Navigator.pushReplacementNamed(context, '/welcome');
-          } else if (mounted) {
-            setState(() {
-              _errorMessage = 'Erreur d\'inscription';
-            });
+          } else {
+            Navigator.pushReplacementNamed(context, '/email_verification');
           }
         }
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _errorMessage = e.toString();
-          });
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
+      } else {
+        final user = await _authService.register(
+          username: _usernameController.text,
+          email: _emailController.text,
+          password: _passwordController.text,
+        );
+
+        if (user != null && mounted) {
+          Navigator.pushReplacementNamed(context, '/email_verification');
         }
       }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _errorMessage = AuthErrorMapper.map(e));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 }

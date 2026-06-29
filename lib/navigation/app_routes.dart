@@ -7,4 +7,7 @@ class AppRoutes {
   static const onlineCombat = '/online_combat';
   static const introVideo = '/intro_video';
   static const game = '/game';
+  static const forgotPassword = '/forgot_password';
+  static const emailVerification = '/email_verification';
+  static const securitySettings = '/security_settings';
 }

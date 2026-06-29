@@ -13,6 +13,7 @@ import 'screens/game_screen.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/email_verification_screen.dart';
 import 'screens/security_settings_screen.dart';
+import 'screens/mfa_onboarding_screen.dart';
 import 'navigation/app_routes.dart';
 import 'services/database_initializer.dart';
 import 'utils/security_config.dart';
@@ -126,6 +127,7 @@ class MyApp extends StatelessWidget {
         AppRoutes.onlineCombat: (context) => const OnlineCombatScreen(),
         AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
         AppRoutes.emailVerification: (context) => const EmailVerificationScreen(),
+        AppRoutes.mfaOnboarding: (context) => const MfaOnboardingScreen(),
         AppRoutes.securitySettings: (context) => const SecuritySettingsScreen(),
       },
     );

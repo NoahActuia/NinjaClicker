@@ -3,6 +3,7 @@ import '../models/user.dart' as app_model;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/security_config.dart';
 import 'mfa_service.dart';
+import 'email_action_service.dart';
 
 /// Résultat d'une tentative de connexion (avec ou sans MFA).
 class AuthResult {
@@ -21,6 +22,7 @@ class AuthService {
   final firebase_auth.FirebaseAuth _auth = firebase_auth.FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final MfaService _mfaService = MfaService();
+  final EmailActionService _emailActionService = EmailActionService();
 
   int _failedLoginAttempts = 0;
   DateTime? _lockoutUntil;
@@ -183,10 +185,7 @@ class AuthService {
   }
 
   Future<void> sendEmailVerification() async {
-    final user = _auth.currentUser;
-    if (user != null && !user.emailVerified) {
-      await user.sendEmailVerification();
-    }
+    await _emailActionService.sendVerificationEmail();
   }
 
   Future<void> reloadUser() async {
@@ -197,7 +196,16 @@ class AuthService {
     final emailError = SecurityConfig.validateEmail(email);
     if (emailError != null) throw Exception(emailError);
 
-    await _auth.sendPasswordResetEmail(email: email.trim().toLowerCase());
+    await _emailActionService.sendPasswordReset(email);
+  }
+
+  Future<void> syncMfaStatusToFirestore() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    final mfaEnabled = (await user.multiFactor.getEnrolledFactors()).isNotEmpty;
+    await _firestore.collection('users').doc(user.uid).update({
+      'mfaEnabled': mfaEnabled,
+    });
   }
 
   Future<void> logout() async {

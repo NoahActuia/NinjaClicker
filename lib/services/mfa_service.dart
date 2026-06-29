@@ -1,9 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Gestion de l'authentification à deux facteurs (TOTP) via Firebase Auth MFA.
 /// Nécessite Firebase Authentication with Identity Platform activé dans la console.
 class MfaService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   /// Indique si l'utilisateur connecté a le MFA activé.
   Future<bool> isMfaEnabled() async {
@@ -52,6 +54,7 @@ class MfaService {
     );
 
     await user.multiFactor.enroll(assertion, displayName: displayName);
+    await _syncMfaStatus(true);
   }
 
   /// Résout une connexion MFA après signInWithEmailAndPassword.
@@ -77,6 +80,16 @@ class MfaService {
     final factors = await user.multiFactor.getEnrolledFactors();
     if (factors.isEmpty) return;
     await user.multiFactor.unenroll(multiFactorInfo: factors[factorIndex]);
+    final remaining = await user.multiFactor.getEnrolledFactors();
+    await _syncMfaStatus(remaining.isNotEmpty);
+  }
+
+  Future<void> _syncMfaStatus(bool enabled) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    await _firestore.collection('users').doc(uid).update({
+      'mfaEnabled': enabled,
+    });
   }
 }
 

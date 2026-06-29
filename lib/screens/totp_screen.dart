@@ -45,11 +45,7 @@ class _TotpVerifyScreenState extends State<TotpVerifyScreen> {
       );
 
       if (user != null && mounted) {
-        if (_authService.isEmailVerified) {
-          Navigator.pushReplacementNamed(context, '/welcome');
-        } else {
-          Navigator.pushReplacementNamed(context, '/email_verification');
-        }
+        Navigator.pushReplacementNamed(context, '/');
       }
     } catch (e) {
       if (mounted) {

@@ -9,5 +9,6 @@ class AppRoutes {
   static const game = '/game';
   static const forgotPassword = '/forgot_password';
   static const emailVerification = '/email_verification';
+  static const mfaOnboarding = '/mfa_onboarding';
   static const securitySettings = '/security_settings';
 }

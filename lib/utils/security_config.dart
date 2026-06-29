@@ -10,6 +10,9 @@ class SecurityConfig {
   /// Initialisation de la base depuis le client (seed) uniquement en debug.
   static bool get allowClientDatabaseSeeding => kDebugMode;
 
+  /// Exige la 2FA après vérification email (désactivé en debug pour les tests).
+  static bool get requireMfaForAccess => !kDebugMode;
+
   /// Longueur minimale du mot de passe.
   static const int minPasswordLength = 12;
 

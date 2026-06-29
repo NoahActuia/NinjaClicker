@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../utils/auth_error_mapper.dart';
 import '../styles/kai_colors.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
-  const EmailVerificationScreen({super.key});
+  final VoidCallback? onVerified;
+
+  const EmailVerificationScreen({super.key, this.onVerified});
 
   @override
   State<EmailVerificationScreen> createState() =>
@@ -15,26 +18,50 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   final _authService = AuthService();
   bool _isLoading = false;
   String _message = '';
+  Timer? _pollTimer;
 
-  Future<void> _checkVerification() async {
-    setState(() {
-      _isLoading = true;
-      _message = '';
+  @override
+  void initState() {
+    super.initState();
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _checkVerification(silent: true);
     });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _checkVerification({bool silent = false}) async {
+    if (_isLoading) return;
+
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _message = '';
+      });
+    }
 
     try {
       await _authService.reloadUser();
-      if (_authService.isEmailVerified && mounted) {
-        Navigator.pushReplacementNamed(context, '/welcome');
-      } else if (mounted) {
-        setState(() => _message = 'Email pas encore vérifié. Consultez votre boîte mail.');
+      if (_authService.isEmailVerified) {
+        _pollTimer?.cancel();
+        widget.onVerified?.call();
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pushReplacementNamed(context, '/');
+        }
+      } else if (!silent && mounted) {
+        setState(() => _message =
+            'Email pas encore vérifié. Consultez votre boîte mail (et les spams).');
       }
     } catch (e) {
-      if (mounted) {
+      if (!silent && mounted) {
         setState(() => _message = AuthErrorMapper.map(e));
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (!silent && mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -89,13 +116,14 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Un email de vérification a été envoyé à :\n$email',
+                  'Un email Kaijin a été envoyé à :\n$email',
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white70),
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Vous devez vérifier votre email avant d\'accéder au jeu.',
+                  'Cliquez sur le lien dans l\'email, puis revenez ici.\n'
+                  'Vérification automatique toutes les 5 secondes.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white54, fontSize: 13),
                 ),
@@ -117,7 +145,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                   const CircularProgressIndicator(color: Colors.white)
                 else ...[
                   ElevatedButton(
-                    onPressed: _checkVerification,
+                    onPressed: () => _checkVerification(),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: KaiColors.primaryDark,
                       foregroundColor: Colors.white,

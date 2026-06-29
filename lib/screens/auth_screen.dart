@@ -211,11 +211,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
           );
         } else if (result.user != null) {
-          if (_authService.isEmailVerified) {
-            Navigator.pushReplacementNamed(context, '/welcome');
-          } else {
-            Navigator.pushReplacementNamed(context, '/email_verification');
-          }
+          Navigator.pushReplacementNamed(context, '/');
         }
       } else {
         final user = await _authService.register(
@@ -225,7 +221,7 @@ class _AuthScreenState extends State<AuthScreen> {
         );
 
         if (user != null && mounted) {
-          Navigator.pushReplacementNamed(context, '/email_verification');
+          Navigator.pushReplacementNamed(context, '/');
         }
       }
     } catch (e) {

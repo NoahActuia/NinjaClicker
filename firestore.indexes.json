@@ -1,0 +1,30 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "challenges",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "targetId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "challenges",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "challengerId", "order": "ASCENDING" },
+        { "fieldPath": "targetId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "kaijins",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "level", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

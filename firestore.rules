@@ -1,0 +1,176 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    function isSecureUser() {
+      return isAuthenticated() && isEmailVerified();
+    }
+
+    function ownsKaijin() {
+      return isSecureUser() && resource.data.userId == request.auth.uid;
+    }
+
+    function createsOwnKaijin() {
+      return isSecureUser()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasAll(['userId', 'name', 'xp', 'level']);
+    }
+
+    function isChallengeParticipant() {
+      return isSecureUser()
+        && (resource.data.challengerId == request.auth.uid
+            || resource.data.targetId == request.auth.uid);
+    }
+
+    // Limite les gains d'XP abusifs côté client (anti-triche basique)
+    function isReasonableXpUpdate() {
+      let oldXp = resource.data.xp;
+      let newXp = request.resource.data.xp;
+      let delta = newXp - oldXp;
+      return delta >= -50 && delta <= 5000;
+    }
+
+    // ── Profils utilisateurs ─────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && request.resource.data.email == request.auth.token.email;
+      allow update: if isOwner(userId)
+        && request.resource.data.email == resource.data.email;
+      allow delete: if false;
+    }
+
+    // ── Personnages (kaijins) ──────────────────────────────────────────────
+    match /kaijins/{kaijinId} {
+      allow read: if isAuthenticated();
+      allow create: if createsOwnKaijin();
+      allow update: if ownsKaijin() && isReasonableXpUpdate();
+      allow delete: if ownsKaijin();
+
+      match /missions/{missionId} {
+        allow read, write: if isSecureUser()
+          && get(/databases/$(database)/documents/kaijins/$(kaijinId)).data.userId == request.auth.uid;
+      }
+
+      match /combat_settings/{settingId} {
+        allow read, write: if isSecureUser()
+          && get(/databases/$(database)/documents/kaijins/$(kaijinId)).data.userId == request.auth.uid;
+      }
+    }
+
+    // ── Catalogues globaux (lecture seule côté client) ───────────────────────
+    match /techniques/{techniqueId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /senseis/{senseiId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /resonances/{resonanceId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // ── Relations kaijin ↔ entités ─────────────────────────────────────────
+    match /kaijinTechniques/{docId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isSecureUser()
+        && get(/databases/$(database)/documents/kaijins/$(request.resource.data.kaijinId)).data.userId == request.auth.uid;
+      allow delete: if isSecureUser()
+        && get(/databases/$(database)/documents/kaijins/$(resource.data.kaijinId)).data.userId == request.auth.uid;
+    }
+
+    match /kaijinSenseis/{docId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isSecureUser()
+        && get(/databases/$(database)/documents/kaijins/$(request.resource.data.kaijinId)).data.userId == request.auth.uid;
+      allow delete: if isSecureUser()
+        && get(/databases/$(database)/documents/kaijins/$(resource.data.kaijinId)).data.userId == request.auth.uid;
+    }
+
+    match /kaijinResonances/{docId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isSecureUser()
+        && get(/databases/$(database)/documents/kaijins/$(request.resource.data.kaijinId)).data.userId == request.auth.uid;
+      allow delete: if isSecureUser()
+        && get(/databases/$(database)/documents/kaijins/$(resource.data.kaijinId)).data.userId == request.auth.uid;
+    }
+
+    // ── Missions utilisateur ─────────────────────────────────────────────────
+    match /userMissions/{userId} {
+      allow read, write: if isOwner(userId) && isEmailVerified();
+    }
+
+    // ── PvP : défis ────────────────────────────────────────────────────────
+    match /challenges/{challengeId} {
+      allow read: if isSecureUser() && isChallengeParticipant();
+      allow create: if isSecureUser()
+        && request.resource.data.challengerId == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if isSecureUser() && isChallengeParticipant();
+      allow delete: if false;
+    }
+
+    // ── PvP : combats ────────────────────────────────────────────────────────
+    match /battles/{battleId} {
+      allow read: if isSecureUser();
+      allow create: if isSecureUser();
+      allow update: if isSecureUser()
+        && (resource.data.player1Id == request.auth.uid
+            || resource.data.player2Id == request.auth.uid
+            || resource.data.challengerId == request.auth.uid
+            || resource.data.targetId == request.auth.uid);
+      allow delete: if false;
+    }
+
+    // ── Legacy (lecture seule, migration en cours) ─────────────────────────
+    match /ninjas/{ninjaId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /ninjaTechniques/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /users/{userId}/techniques/{techniqueId} {
+      allow read, write: if isOwner(userId) && isEmailVerified();
+    }
+
+    // ── Collections debug / test : BLOQUÉES en production ────────────────────
+    match /test/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /connection_test/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /exports/{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── Refus par défaut ─────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

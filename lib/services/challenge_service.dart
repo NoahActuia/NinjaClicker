@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'security_service.dart';
 
 class ChallengeService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -15,6 +17,14 @@ class ChallengeService {
     required String targetKaijinId,
   }) async {
     try {
+      SecurityService.requireEmailVerified();
+      final currentUid = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUid == null || challengerId != currentUid) {
+        throw SecurityException('Vous ne pouvez défier qu\'en votre nom');
+      }
+      if (targetId == currentUid) {
+        throw SecurityException('Vous ne pouvez pas vous défier vous-même');
+      }
       print('Création d\'un nouveau défi:');
       print(
           '- Challenger: $challengerName ($challengerId) - Power: $challengerPower');
@@ -73,6 +83,11 @@ class ChallengeService {
   // Accepter un défi
   Future<void> acceptChallenge(String challengeId) async {
     try {
+      final currentUid = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUid == null) {
+        throw SecurityException('Utilisateur non authentifié');
+      }
+      await SecurityService.requireChallengeTarget(challengeId, currentUid);
       print('Début de l\'acceptation du défi: $challengeId');
 
       // Vérifier si le défi existe et est toujours en attente
@@ -111,6 +126,11 @@ class ChallengeService {
   // Refuser un défi
   Future<void> rejectChallenge(String challengeId) async {
     try {
+      final currentUid = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUid == null) {
+        throw SecurityException('Utilisateur non authentifié');
+      }
+      await SecurityService.requireChallengeTarget(challengeId, currentUid);
       print('Refus du défi: $challengeId');
       await _firestore.collection('challenges').doc(challengeId).update({
         'status': 'rejected',

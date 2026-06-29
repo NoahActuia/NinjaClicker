@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/kaijin.dart';
 import '../models/technique.dart';
 import 'app_logger.dart';
+import 'security_service.dart';
 
 class KaijinService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -12,6 +14,7 @@ class KaijinService {
     required String name,
   }) async {
     try {
+      SecurityService.requireOwnership(userId);
       // Créer les données du kaijin
       final kaijinData = {
         'userId': userId,
@@ -147,6 +150,7 @@ class KaijinService {
   // Supprimer un kaijin
   Future<bool> deleteKaijin(String kaijinId) async {
     try {
+      await SecurityService.requireKaijinOwnership(kaijinId);
       // 1. Supprimer les techniques du kaijin
       final techniqueRelations = await _firestore
           .collection('kaijinTechniques')
@@ -187,6 +191,7 @@ class KaijinService {
   // Mettre à jour un kaijin
   Future<void> updateKaijin(Kaijin kaijin) async {
     try {
+      await SecurityService.requireKaijinOwnership(kaijin.id);
       await _firestore
           .collection('kaijins')
           .doc(kaijin.id)
@@ -200,6 +205,10 @@ class KaijinService {
   // Ajouter de l'XP
   Future<void> addXp(String kaijinId, int amount) async {
     try {
+      await SecurityService.requireKaijinOwnership(kaijinId);
+      if (amount > 5000 || amount < -50) {
+        throw SecurityException('Modification d\'XP non autorisée');
+      }
       await _firestore.runTransaction((transaction) async {
         final kaijinRef = _firestore.collection('kaijins').doc(kaijinId);
         final kaijinDoc = await transaction.get(kaijinRef);
@@ -267,6 +276,7 @@ class KaijinService {
   // Ajouter une technique à un kaijin
   Future<void> addTechniqueToKaijin(String kaijinId, String techniqueId) async {
     try {
+      await SecurityService.requireKaijinOwnership(kaijinId);
       // Vérifier si la relation existe déjà
       final querySnapshot = await _firestore
           .collection('kaijinTechniques')
@@ -306,6 +316,7 @@ class KaijinService {
   Future<void> updateKaijinTechnique(
       String kaijinId, String techniqueId, int level) async {
     try {
+      await SecurityService.requireKaijinOwnership(kaijinId);
       // Vérifier si la relation existe déjà
       final querySnapshot = await _firestore
           .collection('kaijinTechniques')

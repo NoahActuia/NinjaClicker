@@ -14,9 +14,11 @@ import 'screens/forgot_password_screen.dart';
 import 'screens/email_verification_screen.dart';
 import 'screens/security_settings_screen.dart';
 import 'screens/mfa_onboarding_screen.dart';
+import 'screens/unsupported_platform_screen.dart';
 import 'navigation/app_routes.dart';
 import 'services/database_initializer.dart';
 import 'utils/security_config.dart';
+import 'utils/platform_support.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/cupertino.dart';
 import 'styles/kai_colors.dart';
@@ -24,41 +26,65 @@ import 'services/resonance_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (!PlatformSupport.isFirebaseSupported) {
+    runApp(MyApp(
+      firebaseInitialized: false,
+      firebaseError: PlatformSupport.unsupportedPlatformMessage,
+      unsupportedPlatform: true,
+    ));
+    return;
+  }
+
+  var firebaseInitialized = false;
+  var firebaseError = '';
+
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    firebaseInitialized = true;
 
-    // Configure Crashlytics uniquement pour les plateformes mobiles
-    if (!kIsWeb) {
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS)) {
       FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
       FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterError;
     }
   } catch (e) {
-    print("Erreur lors de l'initialisation: $e");
-  }
-  final dbInitializer = DatabaseInitializer();
-  if (SecurityConfig.allowClientDatabaseSeeding) {
-    await dbInitializer.initializeDatabase();
+    firebaseError = e.toString();
+    debugPrint('Erreur lors de l\'initialisation Firebase: $e');
   }
 
-  // Initialiser les résonances par défaut (uniquement en debug)
-  if (SecurityConfig.allowClientDatabaseSeeding) {
-    final resonanceService = ResonanceService();
-    await resonanceService.initDefaultResonances();
+  if (firebaseInitialized && SecurityConfig.allowClientDatabaseSeeding) {
+    try {
+      final dbInitializer = DatabaseInitializer();
+      await dbInitializer.initializeDatabase();
+
+      final resonanceService = ResonanceService();
+      await resonanceService.initDefaultResonances();
+    } catch (e) {
+      debugPrint('Erreur initialisation base: $e');
+    }
   }
 
-  runApp(const MyApp(firebaseInitialized: true, firebaseError: ''));
+  runApp(MyApp(
+    firebaseInitialized: firebaseInitialized,
+    firebaseError: firebaseError,
+    unsupportedPlatform: false,
+  ));
 }
 
 class MyApp extends StatelessWidget {
   final bool firebaseInitialized;
   final String firebaseError;
+  final bool unsupportedPlatform;
 
   const MyApp({
     super.key,
     required this.firebaseInitialized,
     required this.firebaseError,
+    this.unsupportedPlatform = false,
   });
 
   @override
@@ -67,7 +93,6 @@ class MyApp extends StatelessWidget {
       title: 'Kaijin',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // Thème partagé pour Android et iOS
         colorScheme: ColorScheme.fromSeed(
           seedColor: KaiColors.primaryDark,
           secondary: KaiColors.accent,
@@ -84,7 +109,6 @@ class MyApp extends StatelessWidget {
             color: KaiColors.accent,
           ),
         ),
-        // Surcharge iOS spécifique
         cupertinoOverrideTheme: CupertinoThemeData(
           primaryColor: KaiColors.primaryDark,
           brightness: Brightness.light,
@@ -114,11 +138,15 @@ class MyApp extends StatelessWidget {
         return null;
       },
       routes: {
-        AppRoutes.root:
-            (context) =>
-                firebaseInitialized
-                    ? const AuthWrapper()
-                    : FirebaseErrorScreen(error: firebaseError),
+        AppRoutes.root: (context) {
+          if (unsupportedPlatform) {
+            return UnsupportedPlatformScreen(message: firebaseError);
+          }
+          if (!firebaseInitialized) {
+            return FirebaseErrorScreen(error: firebaseError);
+          }
+          return const AuthWrapper();
+        },
         AppRoutes.auth: (context) => const AuthScreen(),
         AppRoutes.welcome: (context) => const WelcomeScreen(),
         if (kDebugMode)
@@ -130,58 +158,6 @@ class MyApp extends StatelessWidget {
         AppRoutes.mfaOnboarding: (context) => const MfaOnboardingScreen(),
         AppRoutes.securitySettings: (context) => const SecuritySettingsScreen(),
       },
-    );
-  }
-}
-
-class FirebaseErrorScreen extends StatelessWidget {
-  final String error;
-
-  const FirebaseErrorScreen({Key? key, required this.error}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.red[100],
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 60),
-              const SizedBox(height: 20),
-              const Text(
-                'Erreur d\'initialisation Firebase',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.red,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                error.isNotEmpty
-                    ? 'Détails: $error'
-                    : 'Impossible d\'initialiser la connexion à Firebase',
-                style: const TextStyle(fontSize: 16),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: kDebugMode
-                    ? () => Navigator.pushNamed(context, AppRoutes.firebaseTest)
-                    : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red[800],
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Diagnostiquer le problème'),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

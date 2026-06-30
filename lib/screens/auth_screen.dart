@@ -210,6 +210,8 @@ class _AuthScreenState extends State<AuthScreen> {
               builder: (_) => TotpVerifyScreen(resolver: result.mfaResolver!),
             ),
           );
+        } else if (result.requiresEmailVerification) {
+          Navigator.pushReplacementNamed(context, '/');
         } else if (result.user != null) {
           Navigator.pushReplacementNamed(context, '/');
         }

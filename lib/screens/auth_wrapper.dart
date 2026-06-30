@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../services/auth_service.dart';
 import '../services/mfa_service.dart';
 import '../utils/security_config.dart';
 import 'auth_screen.dart';
@@ -34,7 +35,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
           return const AuthScreen();
         }
 
-        if (!user.emailVerified) {
+        if (!AuthService.canAccessApp(
+          isAuthenticated: true,
+          isEmailVerified: user.emailVerified,
+        )) {
           return EmailVerificationScreen(
             onVerified: () => setState(() {}),
           );

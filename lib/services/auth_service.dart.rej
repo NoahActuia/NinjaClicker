@@ -1,0 +1,10 @@
+--- lib/services/auth_service.dart
++++ lib/services/auth_service.dart
+@@ -110,6 +110,7 @@ class AuthService {
+ 
+     final verificationSent = await sendEmailVerification();
+     if (!verificationSent) {
++      print('[AUTH] Impossible d\'envoyer l\'email de vérification.');
+       throw Exception('Impossible d'envoyer l'email de vérification.');
+     }
+ 

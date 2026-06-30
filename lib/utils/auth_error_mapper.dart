@@ -29,6 +29,8 @@ class AuthErrorMapper {
           return 'Reconnectez-vous pour effectuer cette action sensible.';
         case 'multi-factor-auth-required':
           return 'Vérification à deux facteurs requise.';
+        case 'email-not-verified':
+          return 'Veuillez vérifier votre adresse email avant de vous connecter.';
         case 'invalid-verification-code':
         case 'invalid-verification-id':
           return 'Code de vérification invalide ou expiré.';

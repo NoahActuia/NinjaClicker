@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../models/user.dart' as app_model;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../utils/security_config.dart';
 import 'mfa_service.dart';
 import 'email_action_service.dart';
@@ -10,17 +11,20 @@ class AuthResult {
   final app_model.User? user;
   final firebase_auth.MultiFactorResolver? mfaResolver;
   final bool requiresMfa;
+  final bool requiresEmailVerification;
 
   const AuthResult({
     this.user,
     this.mfaResolver,
     this.requiresMfa = false,
+    this.requiresEmailVerification = false,
   });
 }
 
 class AuthService {
   final firebase_auth.FirebaseAuth _auth = firebase_auth.FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(region: 'europe-west1');
   final MfaService _mfaService = MfaService();
   final EmailActionService _emailActionService = EmailActionService();
 
@@ -31,6 +35,13 @@ class AuthService {
   bool get isLoggedIn => _auth.currentUser != null;
   Stream<firebase_auth.User?> get authStateChanges => _auth.authStateChanges();
   bool get isEmailVerified => _auth.currentUser?.emailVerified ?? false;
+
+  static bool canAccessApp({
+    required bool isAuthenticated,
+    required bool isEmailVerified,
+  }) {
+    return isAuthenticated && isEmailVerified;
+  }
 
   Future<bool> get isMfaEnabled => _mfaService.isMfaEnabled();
 
@@ -97,7 +108,14 @@ class AuthService {
         .doc(userCredential.user!.uid)
         .set(userData);
 
-    await sendEmailVerification();
+    final verificationSent = await sendEmailVerification();
+    if (!verificationSent) {
+      print('[AUTH] Impossible d\'envoyer l\'email de vérification.');
+      throw Exception('Impossible d’envoyer l’email de vérification.');
+    }
+    else {
+      print('[AUTH] Email de vérification envoyé avec succès à ${email.trim().toLowerCase()}');
+    }
 
     return app_model.User(
       id: userCredential.user!.uid,
@@ -124,7 +142,28 @@ class AuthService {
       _resetLoginAttempts();
 
       if (userCredential.user != null) {
-        final user = await _syncUserDocument(userCredential.user!);
+        await userCredential.user!.reload();
+        final currentUser = _auth.currentUser;
+
+        if (currentUser == null || currentUser.emailVerified != true) {
+          await sendEmailVerification();
+          return const AuthResult(requiresEmailVerification: true);
+        }
+
+        final user = await _syncUserDocument(currentUser);
+        
+        // Envoyer une notification de connexion
+        final notified = await notifyLogin(
+          email: currentUser.email ?? '',
+          username: currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'Joueur',
+        );
+        
+        if (notified) {
+          print('[AUTH] Email de connexion envoyé avec succès');
+        } else {
+          print('[AUTH] Impossible d\'envoyer l\'email de connexion');
+        }
+        
         return AuthResult(user: user);
       }
       return const AuthResult();
@@ -184,8 +223,31 @@ class AuthService {
     return newUser;
   }
 
-  Future<void> sendEmailVerification() async {
-    await _emailActionService.sendVerificationEmail();
+  Future<bool> sendEmailVerification() async {
+    try {
+      await _emailActionService.sendVerificationEmail();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> notifyLogin({
+    required String email,
+    required String username,
+  }) async {
+    try {
+      final callable = _functions.httpsCallable('notifyLogin');
+      final result = await callable.call<Map<String, dynamic>>({
+        'email': email,
+        'username': username,
+      });
+      print('[NOTIFY_LOGIN] Résultat: ${result.data}');
+      return result.data?['sent'] == true;
+    } catch (e) {
+      print('[NOTIFY_LOGIN_ERROR] Erreur lors de l\'appel à la fonction: $e');
+      return false;
+    }
   }
 
   Future<void> reloadUser() async {

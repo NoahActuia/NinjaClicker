@@ -72,9 +72,11 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     });
 
     try {
-      await _authService.sendEmailVerification();
+      final sent = await _authService.sendEmailVerification();
       if (mounted) {
-        setState(() => _message = 'Email de vérification renvoyé !');
+        setState(() => _message = sent
+            ? 'Email de vérification renvoyé !'
+            : 'L’envoi de l’email a échoué. Vérifiez votre réseau ou votre configuration Firebase.');
       }
     } catch (e) {
       if (mounted) {
